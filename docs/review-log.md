@@ -689,3 +689,47 @@ open until someone with actual MPC expertise addresses them.
   bindings, `tls_certs_present` caveat). Conformance suite UNCHANGED; Sigma_T NOT
   started.
 - **Status:** `open` (awaiting gate-2 re-review)
+
+### R-43 — Gate 2 re-review-3: evidence-binding gaps (Codex) + a CRITICAL name-spoof leak (independent pass)
+
+- **Date:** 2026-08-02
+- **Sources:** ChatGPT/Codex, gate-2 re-review (3rd), issue #5 comment
+  `#5160817646`; AND an independent in-house adversarial pass run in parallel.
+- **Objections.**
+  Codex (evidence binding): (1) four copies of ONE genuine CI record, renamed to
+  four unique `case_id`s, still satisfied `--count 4 --private --recompute`
+  (replay); (2) `input_hash` was never bound to a canonical case; (3) parsed
+  `ACCEPT/PAYLOAD` values were never compared with `oracle_expect()`, so
+  `ACCEPT 777 / PAYLOAD -999` could be certified with forged PASS flags; (4) a
+  secondary false-rejection risk from stale assembly, because `compile_manifest`
+  used fixed glob prefixes in the cached MP-SPDZ dir.
+  Independent pass (delivery inspection): a CRITICAL leak Codex did not raise —
+  `delivery_inspect` keyed the masked-tape allowlist on the tape-NAME substring
+  `(EQZ|LTZ)\(` and only parsed the MAIN tape for `privateoutput` players. Since
+  `program.new_tape(fn, name='EQZ(spoof)')` writes the name verbatim, a subtape
+  delivering party 1's verdict to player 0 via `privateoutput` + a
+  `binary_output()` file sink (no stdout) was ACCEPTED — verified end-to-end. The
+  clear-print blocklist and the 4-pattern `manifest_signature` were also
+  non-exhaustive (`intoutput`/`print_reg_plains`/`writesocket*` evaded; a sink
+  injected into an existing tape collided in the signature).
+- **Assessment:** All correct. Both classes reproduced locally before fixing (the
+  name-spoof compiled and passed the old gate; the four clones passed the old
+  validator).
+- **Resolution (one commit).**
+  (1) `delivery_inspect.py` rebuilt to bind on CONTENT, not tape name:
+  `privateoutput` only in main with players `[0,0,1,1,2,2]` (none in any subtape);
+  NO public open-to-all (the `True` open flag) in ANY tape (masked comparison opens
+  carry `False`); NO file/socket/print sink outside guarded `cond_print` in main;
+  every non-main tape must match `^(EQZ|LTZ)\(\d+\)_\d+$`. A digit-named spoof is
+  caught by the content rules regardless of name. `manifest_signature` now hashes
+  the FULL normalized assembly of every tape (deterministic across compiles, so the
+  `--recompute` binding still matches). `threshold_smc_namespoof.mpc` committed as
+  a third executable negative control.
+  (2) `validate_private` under `--recompute` binds each record to a canonical case:
+  recompute `input_hash` + oracle `(ACCEPT, PAYLOAD)` from the pinned `CASES` and
+  require a bijection — replayed duplicates, unbound `input_hash`, forged verdict
+  values, and incomplete coverage all rejected.
+  (3) `compile_manifest` clears stale `{prefix}-{stem}-{query}-*` before compiling.
+  ADVERSARY.md + docs updated. Conformance suite UNCHANGED; Sigma_T NOT started.
+  86 conformance tests green (46 functional + 40 private-gate).
+- **Status:** `open` (awaiting gate-2 re-review)

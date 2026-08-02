@@ -176,8 +176,25 @@ def _recompute_bindings(queries):
     return exp_source, exp_sigs
 
 
+def _recompute_case_table():
+    """Rebuild the canonical {input_hash: (query, exp_acc, exp_pay)} table from the
+    pinned CASES + the plaintext oracle (no MP-SPDZ). Binds each record to a
+    specific case, so a replayed duplicate, an unbound input_hash, or a forged
+    verdict value fails (re-review-3 C1/C2/C3)."""
+    from private_run import CASES, support_weights
+    from mpc_run import oracle_expect
+    table = {}
+    for secrets, q in CASES:
+        wv = support_weights(secrets)
+        ih = hashlib.sha256(repr((secrets, wv, q)).encode()).hexdigest()
+        exp_acc, exp_pay, _, _ = oracle_expect(secrets, wv, q)
+        table[ih] = (q, list(exp_acc), list(exp_pay))
+    return table
+
+
 def validate_private(path, count, repo=None, mpspdz=None, require_bound=False,
-                     expected_source_sha256=None, expected_delivery_sigs=None):
+                     expected_source_sha256=None, expected_delivery_sigs=None,
+                     expected_case_table=None):
     """Typed, exact-schema validator for private-delivery evidence.
 
     Beyond the earlier flag checks it now (a) enforces an EXACT field set + types
@@ -201,6 +218,7 @@ def validate_private(path, count, repo=None, mpspdz=None, require_bound=False,
     if len(records) != count:
         errs.append(f"{path}: expected {count} records, found {len(records)}")
     seen = set()
+    used_ih = set()
     for i, r in enumerate(records):
         tag = f"{path}[{i}]"
         # (a) exact typed schema
@@ -262,6 +280,32 @@ def validate_private(path, count, repo=None, mpspdz=None, require_bound=False,
                 errs.append(f"{tag}: no recomputed delivery_sig for query {q!r}")
             elif r.get("delivery_sig") != exp:
                 errs.append(f"{tag}: delivery_sig != recomputed manifest signature")
+        # (e) bind the record to a canonical case: input_hash -> (query, oracle
+        # verdict). Rejects replayed duplicates (C1), an unbound/forged input_hash
+        # (C2), and verdict values that disagree with the plaintext oracle (C3).
+        if expected_case_table is not None:
+            ih = r.get("input_hash")
+            ent = expected_case_table.get(ih)
+            if ent is None:
+                errs.append(f"{tag}: input_hash not a canonical case (unbound/forged)")
+            elif ih in used_ih:
+                errs.append(f"{tag}: replayed canonical case (duplicate input_hash)")
+            else:
+                used_ih.add(ih)
+                exp_q, exp_acc, exp_pay = ent
+                if q != exp_q:
+                    errs.append(f"{tag}: query {q!r} != canonical {exp_q!r} for this input_hash")
+                for j in range(3):
+                    sj = r.get(f"party{j}_stdout")
+                    if not isinstance(sj, str):
+                        continue
+                    try:
+                        got = strict_parse_party(sj, j)
+                    except ValueError:
+                        continue                             # (b) already logged it
+                    if got.get("ACCEPT") != exp_acc[j] or got.get("PAYLOAD") != exp_pay[j]:
+                        errs.append(f"{tag}: party{j} verdict {got} != oracle "
+                                    f"(ACCEPT {exp_acc[j]}, PAYLOAD {exp_pay[j]})")
         # identity + provenance
         cid = r.get("case_id")
         if not cid or cid in seen:
@@ -277,6 +321,9 @@ def validate_private(path, count, repo=None, mpspdz=None, require_bound=False,
                 errs.append(f"{tag}: not bound")
             if r.get("repo_sha_source") != "github_actions":
                 errs.append(f"{tag}: bound but source={r.get('repo_sha_source')!r}")
+    if expected_case_table is not None and used_ih != set(expected_case_table):
+        errs.append(f"{path}: evidence does not cover the canonical case set "
+                    f"(covered {len(used_ih)}/{len(expected_case_table)})")
     return errs
 
 
@@ -297,7 +344,8 @@ def main():
         kw = {}
         if a.recompute:
             exp_src, exp_sigs = _recompute_bindings(_EXPECTED_QUERIES)
-            kw = dict(expected_source_sha256=exp_src, expected_delivery_sigs=exp_sigs)
+            kw = dict(expected_source_sha256=exp_src, expected_delivery_sigs=exp_sigs,
+                      expected_case_table=_recompute_case_table())
         errs = validate_private(a.path, a.count, a.repo, a.mpspdz, a.require_bound, **kw)
     else:
         errs = validate(a.path, a.count, a.repo, a.mpspdz, a.require_bound)

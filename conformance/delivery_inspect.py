@@ -1,22 +1,40 @@
 """
-Compiled-delivery inspection over the COMPLETE tape manifest (gate 2 re-review 2,
-issue #5). The previous version inspected only the `-0` main tape, so a leak in a
-separate `@function_tape` (public `reveal()` + `print_ln`) slipped through. This
-inspects EVERY generated tape and binds them.
+Compiled-delivery inspection by CONTENT, not tape NAME (gate 2 re-review-3).
+
+Re-review-2 keyed the masked-subtape allowlist on the tape KIND string
+(`(EQZ|LTZ)\\(`). But an .mpc author controls tape names: `program.new_tape(fn,
+name='EQZ(spoof)')` writes the name verbatim, so a subtape that `privateoutput`s
+another party's secret to the wrong player and `intoutput`s it to a file passed
+the old gate (verified). `_main_players` also only parsed the MAIN tape, so a
+wrong-player `privateoutput` in a subtape was never checked.
+
+This version binds on CONTENT. Verified facts about the pinned backend
+(replicated-ring-party.x @ 9d80959):
+  * a PUBLIC reveal (open-to-all) compiles to an open instruction with the `True`
+    flag (`asm_open 13, True, ...`); the comparison library's MASKED intermediate
+    opens use the `False` flag (`vasm_open 3, 3, False, ...`).
+  * the clean private build's MAIN tape has exactly: `privateoutput` to players
+    [0,0,1,1,2,2], guarded `cond_print_*`, and NO open and NO other sink.
+  * the masked EQZ/LTZ subtapes contain ONLY `False` opens and NO sink at all.
+  * the full per-tape assembly is DETERMINISTIC across compiles.
 
 A build is private-delivering iff ALL hold:
-  (a) the MAIN tape delivers the six verdicts via `privateoutput` to players
-      [0,0,1,1,2,2] and has NO public open;
-  (b) every NON-main tape is an allowlisted masked-comparison subtape (EQZ/LTZ);
-  (c) NO public open (`asm_open ... True` / `open`) appears outside those masked
-      subtapes;
-  (d) NO UNCONDITIONAL cleartext print (`print_reg_plain` / `print_char*` /
-      `print_float_plain` / `print_int`) appears in ANY tape. The legitimate
-      per-player delivery uses `cond_print_*` (guarded by player id); a public
-      leak uses the unconditional variants.
+  (a) exactly one MAIN tape ("-0"); its `privateoutput` player multiset is
+      exactly [0,0,1,1,2,2]; it performs NO open; its only sinks are
+      `privateoutput` + guarded `cond_print_*`.
+  (b) NO `privateoutput` appears in ANY non-main tape (player set is bound across
+      the WHOLE manifest, not just main).
+  (c) NO public open-to-all (`... , True`) appears in ANY tape.
+  (d) NO cleartext/file/socket sink opcode (print_reg*/print_char*/print_int*/
+      print_float*/print_str*/intoutput/floatoutput/rawoutput/writesocket*/
+      writefile*/writesharestofile) appears in ANY tape; guarded `cond_print_*`
+      is the only permitted print, and only in main.
+  (e) every non-main tape is a compiler-generated masked comparison tape, matched
+      by the STRICT pattern `^(EQZ|LTZ)\\(\\d+\\)_\\d+$` (an author-introduced
+      tape, incl. a non-digit name spoof like `EQZ(spoof)`, is rejected).
 
-Codex's separate-tape `reveal()+print_ln('LEAK')` sibling violates (b), (c), and
-(d); it is committed as `threshold_smc_subleak.mpc` and the gate REJECTS it.
+manifest_signature() now hashes the FULL normalized assembly of every tape, so an
+injected sink/tape/open changes it (the old 4-pattern hash collided).
 """
 import glob
 import hashlib
@@ -29,21 +47,31 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mpc_run import MPSPDZ, HERE
 
 _PRIVOUT = re.compile(r"^privateoutput\s+\d+,\s*(.+?)(?:#.*)?$")
-_PUBOPEN = re.compile(r"\b(v?asm_open)\b")
-_MASKED = re.compile(r"(EQZ|LTZ)\(")
-_CLEARPRINT = re.compile(r"\b(print_reg_plain|print_float_plain|print_char4|"
-                         r"print_char|print_int)\b")
+_OPEN = re.compile(r"\b(v?asm_open|open)\b")
+_OPEN_TRUE = re.compile(r"\b(v?asm_open|open)\b[^#]*\bTrue\b")
+_CONDPRINT = re.compile(r"\bcond_print\w*\b")
+_MASKED_NAME = re.compile(r"^(EQZ|LTZ)\(\d+\)_\d+$")
+# cleartext / file / socket output sinks (guarded cond_print_* is NOT here)
+_SINK = re.compile(
+    r"\b(print_reg\w*|print_char\w*|print_int\w*|print_float\w*|print_str\w*|"
+    r"print_bit\w*|print_mem\w*|intoutput|floatoutput|rawoutput|"
+    r"writesocket\w*|writesharestofile|writefileclear|writefileshare|"
+    r"write_to_file)\b")
 
 
 def compile_manifest(build_stem, query, prefix):
-    """Compile with assembly output; return {tape_kind: asm_text} for ALL tapes."""
+    """Compile with assembly output; return {tape_kind: asm_text} for ALL tapes.
+    Removes stale assembly for this (prefix,stem,query) first (re-review-3 C4), so
+    a cached MP-SPDZ dir cannot pollute the manifest with a prior run's tapes."""
     subprocess.run(["cp", f"{HERE}/mpc/{build_stem}.mpc",
                     f"{MPSPDZ}/Programs/Source/"], check=True)
+    marker = f"{build_stem}-{query}-"
+    for f in glob.glob(f"{MPSPDZ}/{prefix}-{marker}*"):
+        os.remove(f)
     c = subprocess.run(["./compile.py", "-R", "64", "-a", prefix, build_stem, query],
                        cwd=MPSPDZ, capture_output=True, text=True)
     if c.returncode != 0:
         raise RuntimeError(f"compile -a failed:\n{c.stderr}\n{c.stdout}")
-    marker = f"{build_stem}-{query}-"
     man = {}
     for f in sorted(glob.glob(f"{MPSPDZ}/{prefix}-{marker}*")):
         kind = os.path.basename(f).split(marker, 1)[1]      # '0','EQZ(3)_63-5',...
@@ -56,7 +84,7 @@ def _base(kind):
     return re.sub(r"-\d+$", "", kind)                       # drop trailing -index
 
 
-def _main_players(text):
+def _privout_players(text):
     players = []
     for line in text.splitlines():
         m = _PRIVOUT.match(line.strip())
@@ -70,57 +98,69 @@ def _main_players(text):
     return sorted(players)
 
 
-def _public_opens(text):
-    return [l.strip() for l in text.splitlines()
-            if _PUBOPEN.search(l) and "privateoutput" not in l]
-
-
-def _cleartext_prints(text):
-    return [l.strip() for l in text.splitlines() if _CLEARPRINT.search(l)]
+def _lines_matching(rx, text):
+    return [l.strip() for l in text.splitlines() if rx.search(l)]
 
 
 def is_private_manifest(man):
-    """(ok, reasons) over the complete manifest."""
+    """(ok, reasons) over the complete manifest, by content (see module docstring)."""
     reasons = []
-    main = None
-    for kind, text in man.items():
-        if _base(kind) == "0":
-            main = text
-    if main is None:
-        return False, ["no main tape (-0) found"]
+    mains = [k for k in man if _base(k) == "0"]
+    if len(mains) != 1:
+        return False, [f"expected exactly one main tape, got {sorted(mains)}"]
+    main = man[mains[0]]
 
-    if _main_players(main) != [0, 0, 1, 1, 2, 2]:
-        reasons.append(f"main privateoutput players {_main_players(main)} != [0,0,1,1,2,2]")
-    if _public_opens(main):
-        reasons.append("main tape has a public open")
+    # (a) main: correct private delivery, no open, no non-cond print
+    if _privout_players(main) != [0, 0, 1, 1, 2, 2]:
+        reasons.append(f"main privateoutput players {_privout_players(main)} != [0,0,1,1,2,2]")
+    if _lines_matching(_OPEN, main):
+        reasons.append("main tape performs a protocol open (reveal)")
+    main_sinks = _lines_matching(_SINK, main)
+    if main_sinks:
+        reasons.append(f"main tape has non-delivery output opcode: {main_sinks[:1]}")
 
     for kind, text in man.items():
         base = _base(kind)
         if base == "0":
-            pass
-        elif not _MASKED.search(base):
-            reasons.append(f"unexpected non-masked tape: {base}")
-        # public opens only allowed inside masked subtapes
-        if base != "0" and not _MASKED.search(base) and _public_opens(text):
-            reasons.append(f"public open outside masked allowlist in {base}")
-        # unconditional cleartext print anywhere is a leak
-        cp = _cleartext_prints(text)
-        if cp:
-            reasons.append(f"unconditional cleartext print in {base}: {cp[:1]}")
+            continue
+        # (e) only compiler-generated masked comparison tapes may exist
+        if not _MASKED_NAME.match(base):
+            reasons.append(f"unexpected non-masked tape (author-introduced): {base}")
+        # (b) no delivery out of a subtape
+        if _privout_players(text):
+            reasons.append(f"privateoutput in non-main tape {base}")
+        # (d) no print/file/socket sink in a subtape; guarded print only in main
+        sinks = _lines_matching(_SINK, text)
+        if sinks:
+            reasons.append(f"output/exfil opcode in non-main tape {base}: {sinks[:1]}")
+        if _CONDPRINT.search(text):
+            reasons.append(f"per-player print in non-main tape {base}")
+
+    # (c) public open-to-all forbidden anywhere
+    for kind, text in man.items():
+        pub = _lines_matching(_OPEN_TRUE, text)
+        if pub:
+            reasons.append(f"public open-to-all (reveal) in tape {_base(kind)}: {pub[:1]}")
     return (not reasons), reasons
 
 
+def _norm_body(text):
+    """Full normalized tape body: strip comments + blank lines, keep every opcode."""
+    out = []
+    for l in text.splitlines():
+        s = l.split("#", 1)[0].strip()
+        if s:
+            out.append(s)
+    return out
+
+
 def manifest_signature(man):
-    """Stable hash binding the whole delivery manifest (tape kinds + their
-    privateoutput / open / print structure). Any added leak tape changes it."""
+    """Hash the FULL normalized assembly of every tape (deterministic across
+    compiles). Any injected opcode, tape, or open changes it -- unlike the old
+    4-pattern hash, which collided on leaks injected as extra opcodes."""
     parts = []
-    for kind in sorted(man):
-        base = _base(kind)
-        struct = sorted(
-            l.strip() for l in man[kind].splitlines()
-            if l.strip().startswith("privateoutput") or _PUBOPEN.search(l)
-            or _CLEARPRINT.search(l) or "cond_print" in l)
-        parts.append(base + "\n" + "\n".join(struct))
+    for kind in sorted(man, key=_base):
+        parts.append(_base(kind) + "\n" + "\n".join(_norm_body(man[kind])))
     return hashlib.sha256("\n==\n".join(parts).encode()).hexdigest()
 
 
@@ -128,10 +168,10 @@ def manifest_signature(man):
 
 def is_private_delivery(main_text):
     reasons = []
-    if _main_players(main_text) != [0, 0, 1, 1, 2, 2]:
-        reasons.append(f"privateoutput players {_main_players(main_text)} != [0,0,1,1,2,2]")
-    if _public_opens(main_text):
-        reasons.append(f"main tape has public open(s)")
+    if _privout_players(main_text) != [0, 0, 1, 1, 2, 2]:
+        reasons.append(f"privateoutput players {_privout_players(main_text)} != [0,0,1,1,2,2]")
+    if _lines_matching(_OPEN, main_text):
+        reasons.append("main tape has public open(s)")
     return (not reasons), reasons
 
 
@@ -141,7 +181,8 @@ def delivery_signature(main_text):
 
 def gate(query):
     """Executable negative controls: private build accepted; the public-open
-    sibling AND the separate-tape leak sibling both rejected."""
+    sibling, the separate-tape leak sibling, AND the name-spoof subtape sibling
+    are all rejected."""
     detail = {}
     priv = compile_manifest("threshold_smc_private", query, "asm_priv")
     ok_priv, r_priv = is_private_manifest(priv)
@@ -149,13 +190,16 @@ def gate(query):
     detail["private_reasons"] = r_priv
     detail["private_delivery_sig"] = manifest_signature(priv)
 
-    leaky = compile_manifest("threshold_smc_leaky", query, "asm_leaky")
-    detail["leaky_rejected"] = not is_private_manifest(leaky)[0]
+    for stem, key, pfx in (
+        ("threshold_smc_leaky", "leaky_rejected", "asm_leaky"),
+        ("threshold_smc_subleak", "subleak_rejected", "asm_sub"),
+        ("threshold_smc_namespoof", "namespoof_rejected", "asm_ns"),
+    ):
+        m = compile_manifest(stem, query, pfx)
+        detail[key] = not is_private_manifest(m)[0]
 
-    sub = compile_manifest("threshold_smc_subleak", query, "asm_sub")
-    detail["subleak_rejected"] = not is_private_manifest(sub)[0]
-
-    ok = ok_priv and detail["leaky_rejected"] and detail["subleak_rejected"]
+    ok = (ok_priv and detail["leaky_rejected"] and detail["subleak_rejected"]
+          and detail["namespoof_rejected"])
     return ok, detail
 
 
@@ -165,7 +209,8 @@ if __name__ == "__main__":
         ok, d = gate(q)
         print(f"[delivery] {q}: private_ok={d['private_ok']} "
               f"leaky_rejected={d['leaky_rejected']} "
-              f"subleak_rejected={d['subleak_rejected']} -> {'PASS' if ok else 'FAIL'}")
+              f"subleak_rejected={d['subleak_rejected']} "
+              f"namespoof_rejected={d['namespoof_rejected']} -> {'PASS' if ok else 'FAIL'}")
         if d["private_reasons"]:
             print("   ", d["private_reasons"])
         all_ok = all_ok and ok

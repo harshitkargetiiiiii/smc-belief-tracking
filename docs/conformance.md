@@ -1,31 +1,34 @@
-# STATUS (2026-08-02, gate 2 re-review-2 fixes: private delivery)
+# STATUS (2026-08-02, gate 2 re-review-3 fixes: private delivery)
 
-Gate 2's first fix was REFUTED AGAIN (issue #5) with two bypasses; both closed in
-one commit. Sigma_T persistence remains UNAUTHORIZED. Conformance suite + evidence
-gate UNCHANGED.
+Gate 2's re-review flagged more evidence-binding gaps, and an independent
+adversarial pass found a CRITICAL name-spoof leak; all closed in one commit.
+Sigma_T persistence remains UNAUTHORIZED. Conformance suite + evidence gate
+UNCHANGED.
 
 Bypasses closed:
 
-- **Separate-tape leak** (blocker 1): the old inspector read only the MAIN tape,
-  so a build with a clean private main tape plus a separate `@function_tape` doing
-  a public `reveal()` + `print_ln('LEAK ...')` passed. Now `delivery_inspect.py`
-  inspects the COMPLETE tape manifest (main `privateoutput` to [0,0,1,1,2,2] + no
-  public open; every non-main tape an allowlisted masked EQZ/LTZ subtape; no
-  unconditional cleartext print in ANY tape) and hashes the whole manifest into
-  the delivery signature. `threshold_smc_subleak.mpc` reproduces the leak and is
-  REJECTED, alongside `threshold_smc_leaky.mpc`.
-- **Exact two-line stdout** (blocker 2): `strict_parse_party` no longer skips
-  non-verdict lines. A correct party's stdout is exactly two non-empty own PRIV
-  lines (framework noise is on stderr), so any extra/leak line fails closed.
-- **Forged bound record** (blocker 3): `validate_private` is now a typed
-  exact-schema validator — exact field set + types (unknown field / bool-as-int rc
-  rejected), re-parses each retained party stdout with the strict parser, checks
-  the ring command + channel string semantically, and under `--recompute` (CI)
-  requires each record's `source_sha256` and `delivery_sig` to equal values
-  recomputed independently from the checked-out source + a fresh compile.
-- `ADVERSARY.md` updated: complete-manifest binding, exact two-line, recomputed
-  bindings, and a `tls_certs_present` caveat (cert presence != encrypted wire).
-- Tests: 77 in `conformance/` (46 functional conformance + 31 private-gate), all
+- **Name-spoof subtape leak (CRITICAL)**: `program.new_tape(fn, name='EQZ(spoof)')`
+  writes the tape name verbatim, so a subtape delivering party 1's verdict to
+  player 0 via `privateoutput` + a `binary_output()` file sink passed the old
+  name-based allowlist (verified end-to-end — it was ACCEPTED). `delivery_inspect.py`
+  now binds on CONTENT across the whole manifest: `privateoutput` only in main with
+  players [0,0,1,1,2,2] (none in any subtape); NO public open-to-all (the `True`
+  open flag) anywhere — masked comparison opens carry `False`; NO file/socket/print
+  sink outside guarded `cond_print` in main; every non-main tape must match the
+  strict compiler pattern `^(EQZ|LTZ)\(\d+\)_\d+$`. A digit-named spoof is still
+  caught by the content rules. `threshold_smc_namespoof.mpc` is a committed
+  executable negative control.
+- **Signature collision**: `manifest_signature` now hashes the FULL normalized
+  assembly of every tape (was a 4-pattern subset that collided on injected sinks).
+- **Replay / unbound input_hash / unchecked verdict values**: under `--recompute`
+  the validator binds each record to a canonical case — recomputing `input_hash`
+  and the plaintext-oracle `(ACCEPT, PAYLOAD)` from the pinned CASES and requiring
+  a bijection. Four clones with distinct `case_id`s, a forged verdict value, and an
+  `input_hash` not tied to a canonical case are all rejected.
+- **Stale-assembly false rejection**: `compile_manifest` clears stale
+  `{prefix}-{stem}-{query}-*` files before compiling, so a cached MP-SPDZ dir can't
+  pollute the manifest.
+- Tests: 86 in `conformance/` (46 functional conformance + 40 private-gate), all
   green; `reference/` suite unchanged. Functional + compiled-delivery only; NOT a
   simulation-security proof.
 

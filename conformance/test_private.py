@@ -2,10 +2,11 @@
 Unit tests for gate 2 (private delivery), no MP-SPDZ:
 - strict per-party transcript parser (exact two non-empty stdout lines) + the
   reviewer's adversarial mutations;
-- the compiled-delivery classifier distinguishes privateoutput from public open,
-  and the complete-manifest inspector rejects a separate leak tape (the core of
-  the executable negative control, on synthetic assembly);
-- the typed private-evidence validator rejects the reviewer's forged records.
+- the CONTENT-based manifest inspector: accepts the private shape, rejects a
+  name-spoofed subtape, a digit-named content leak, a public open anywhere, and a
+  main-tape sink (the executable negative control's core logic, synthetic);
+- the typed private-evidence validator: rejects forged records, replayed
+  duplicates, and verdict values that disagree with the oracle.
 The real end-to-end run + real compiled-delivery gate execute in CI.
 """
 import pytest
@@ -39,7 +40,6 @@ def test_duplicate_own_raises():
 
 
 def test_unrecognized_stdout_line_raises():
-    # the reviewer's "explicitly tagged non-PRIV leak"
     txt = "PRIV 0 ACCEPT 1\nLEAK 1 ACCEPT 0\nPRIV 0 PAYLOAD 1"
     with pytest.raises(ValueError, match="unrecognized"):
         strict_parse_party(txt, 0)
@@ -62,30 +62,24 @@ def test_empty_stream_raises():
 
 
 def test_extra_framework_line_now_rejected():
-    # blocker-2 regression: a stray line on STDOUT (framework noise or a public
-    # leak) is no longer skipped -- every non-empty stdout line must be an own
-    # PRIV record, so the exact two-line invariant catches the third line.
     txt = "PRIV 0 ACCEPT 1\nPRIV 0 PAYLOAD 1\nTime = 1"
     with pytest.raises(ValueError, match="unrecognized"):
         strict_parse_party(txt, 0)
 
 
 def test_public_leak_line_rejected():
-    # a separate tape's unconditional print_ln('LEAK ...') lands as a 3rd line
     txt = "PRIV 0 ACCEPT 0\nPRIV 0 PAYLOAD 0\nLEAK 1"
     with pytest.raises(ValueError, match="unrecognized"):
         strict_parse_party(txt, 0)
 
 
 def test_reviewer_exact_attack_is_rejected():
-    # wrong duplicate values + tagged non-PRIV leak + expected values last
     txt = "PRIV 0 ACCEPT 9\nPRIV 0 PAYLOAD 9\nLEAK PAYLOAD 1 0\nPRIV 0 ACCEPT 1\nPRIV 0 PAYLOAD 1"
     with pytest.raises(ValueError):
         strict_parse_party(txt, 0)
 
 
 def test_evaluate_privacy_flags_broadcast():
-    # party 0's stream carries everyone's verdicts -> foreign verdict raises
     outs = {
         0: "PRIV 0 ACCEPT 1\nPRIV 0 PAYLOAD 1\nPRIV 1 ACCEPT 0\nPRIV 2 ACCEPT 0",
         1: _own(1, 0, 0),
@@ -100,7 +94,7 @@ def test_evaluate_privacy_clean_passes():
     assert evaluate_privacy(outs, [1, 0, 0], [1, 0, 0]) == []
 
 
-# ---- compiled-delivery classifier (synthetic assembly) ----
+# ---- single-tape classifier (synthetic assembly) ----
 
 PRIV_ASM = ("some prep\n"
             "privateoutput 24, 1, 0, c5, s5, 1, 0, c3, s4, 1, 1, c4, s3, "
@@ -129,29 +123,67 @@ def test_classifier_rejects_wrong_players():
     assert any("players" in r for r in reasons)
 
 
-def test_delivery_signature_differs():
-    assert DI.delivery_signature(PRIV_ASM) != DI.delivery_signature(LEAKY_ASM)
+# ---- CONTENT-based complete-manifest inspector (synthetic manifests) ----
+# masked comparison subtapes: compiler-generated digit names + `False` opens only.
+
+GOOD_MASKED = {"0": PRIV_ASM,
+               "EQZ(3)_63-1": "vasm_open 3, 3, False, c0, s0",
+               "LTZ(36)_64-2": "vasm_open 3, 3, False, c1, s1"}
 
 
 def test_manifest_accepts_private_with_masked_subtapes():
-    man = {"0": PRIV_ASM,
-           "EQZ(3)_63-1": "vasm_open 2, True, c0, s0 # masked compare",
-           "LTZ(36)_64-3": "vasm_open 2, True, c1, s1 # masked compare"}
-    ok, reasons = DI.is_private_manifest(man)
+    ok, reasons = DI.is_private_manifest(GOOD_MASKED)
     assert ok and reasons == []
 
 
-def test_manifest_rejects_separate_leak_tape():
-    # Codex blocker 1: clean private MAIN tape, leak hidden in a separate tape.
-    man = {"0": PRIV_ASM,
-           "EQZ(3)_63-1": "vasm_open 2, True, c0, s0 # masked compare",
-           "leak_final-1": "asm_open 3, True, c0, s0\nprint_reg_plain c0 # LEAK"}
-    ok, reasons = DI.is_private_manifest(man)
+def test_manifest_rejects_name_spoof_tape():
+    # non-digit name spoof: EQZ(spoof) with wrong-player privateoutput + file sink
+    m = dict(GOOD_MASKED)
+    m["EQZ(spoof)-1"] = "privateoutput 4, 1, 0, c0, s0\nintoutput 0, ci0"
+    ok, reasons = DI.is_private_manifest(m)
     assert not ok
-    assert any("leak_final" in r for r in reasons)
-    # and the manifest signature changes when the leak tape is added
-    clean = {"0": PRIV_ASM, "EQZ(3)_63-1": "vasm_open 2, True, c0, s0 # masked"}
-    assert DI.manifest_signature(man) != DI.manifest_signature(clean)
+    assert any("author-introduced" in r for r in reasons)
+    assert any("privateoutput in non-main" in r for r in reasons)
+
+
+def test_manifest_rejects_digit_named_content_leak():
+    # NAME matches the strict masked pattern, but CONTENT leaks -> still rejected
+    m = dict(GOOD_MASKED)
+    m["EQZ(9)_99-1"] = "privateoutput 4, 1, 0, c0, s0\nintoutput 0, ci0"
+    ok, reasons = DI.is_private_manifest(m)
+    assert not ok
+    assert any("privateoutput in non-main" in r for r in reasons)
+    assert any("output/exfil" in r for r in reasons)
+
+
+def test_manifest_rejects_public_open_anywhere():
+    m = dict(GOOD_MASKED)
+    m["EQZ(3)_63-1"] = "asm_open 3, True, c0, s0"     # public reveal (True) in a masked tape
+    ok, reasons = DI.is_private_manifest(m)
+    assert not ok
+    assert any("public open-to-all" in r for r in reasons)
+
+
+def test_manifest_rejects_main_tape_sink():
+    m = {"0": PRIV_ASM + "\nintoutput 0, ci0",
+         "EQZ(3)_63-1": "vasm_open 3, 3, False, c0, s0"}
+    ok, reasons = DI.is_private_manifest(m)
+    assert not ok
+    assert any("non-delivery output" in r for r in reasons)
+
+
+def test_manifest_rejects_wrong_main_players():
+    m = {"0": "privateoutput 8, 1, 0, c1, s1, 1, 0, c2, s2 # x"}
+    ok, reasons = DI.is_private_manifest(m)
+    assert not ok
+    assert any("players" in r for r in reasons)
+
+
+def test_manifest_signature_detects_injected_sink():
+    # the old 4-pattern hash collided on a sink injected into an existing tape
+    leaked = dict(GOOD_MASKED)
+    leaked["EQZ(3)_63-1"] = "vasm_open 3, 3, False, c0, s0\nintoutput 0, ci0"
+    assert DI.manifest_signature(GOOD_MASKED) != DI.manifest_signature(leaked)
 
 
 # ---- typed private evidence validator ----
@@ -215,7 +247,6 @@ def test_private_validator_rejects_unknown_field(tmp_path):
 
 
 def test_private_validator_rejects_bool_rc(tmp_path):
-    # bool masquerading as an int return code
     import validate_evidence as V
     p = _wp(tmp_path, [_priv_rec(party0_rc=True)])
     assert any("party0_rc wrong type (bool)" in e for e in V.validate_private(p, 1))
@@ -272,3 +303,48 @@ def test_private_validator_accepts_matching_bindings(tmp_path):
                               expected_source_sha256=_phex("a"),
                               expected_delivery_sigs={"sum_even": _phex("c")})
     assert errs == []
+
+
+# ---- canonical case-table binding (re-review-3 C1/C2/C3) ----
+
+def test_case_table_accepts_matching(tmp_path):
+    import validate_evidence as V
+    tab = {_phex("a"): ("sum_even", [0, 0, 0], [0, 0, 0])}
+    p = _wp(tmp_path, [_priv_rec(input_hash=_phex("a"))])
+    assert V.validate_private(p, 1, expected_case_table=tab) == []
+
+
+def test_case_table_rejects_replay(tmp_path):
+    import validate_evidence as V
+    tab = {_phex("a"): ("sum_even", [0, 0, 0], [0, 0, 0]),
+           _phex("b"): ("sum_even", [0, 0, 0], [0, 0, 0])}
+    p = _wp(tmp_path, [_priv_rec("c0", input_hash=_phex("a")),
+                       _priv_rec("c1", input_hash=_phex("a"))])
+    errs = V.validate_private(p, 2, expected_case_table=tab)
+    assert any("replayed canonical case" in e for e in errs)
+
+
+def test_case_table_rejects_forged_value(tmp_path):
+    import validate_evidence as V
+    tab = {_phex("a"): ("sum_even", [0, 0, 0], [0, 0, 0])}
+    r = _priv_rec(input_hash=_phex("a"),
+                  party0_stdout="PRIV 0 ACCEPT 1\nPRIV 0 PAYLOAD 0\n")
+    errs = V.validate_private(_wp(tmp_path, [r]), 1, expected_case_table=tab)
+    assert any("!= oracle" in e for e in errs)
+
+
+def test_case_table_rejects_unbound_hash(tmp_path):
+    import validate_evidence as V
+    tab = {_phex("a"): ("sum_even", [0, 0, 0], [0, 0, 0])}
+    p = _wp(tmp_path, [_priv_rec(input_hash=_phex("f"))])
+    errs = V.validate_private(p, 1, expected_case_table=tab)
+    assert any("not a canonical case" in e for e in errs)
+
+
+def test_case_table_requires_full_coverage(tmp_path):
+    import validate_evidence as V
+    tab = {_phex("a"): ("sum_even", [0, 0, 0], [0, 0, 0]),
+           _phex("b"): ("sum_even", [0, 0, 0], [0, 0, 0])}
+    p = _wp(tmp_path, [_priv_rec(input_hash=_phex("a"))])
+    errs = V.validate_private(p, 1, expected_case_table=tab)
+    assert any("does not cover the canonical case set" in e for e in errs)

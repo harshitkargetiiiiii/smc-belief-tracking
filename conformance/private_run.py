@@ -33,6 +33,13 @@ PRIV = re.compile(r"^PRIV (\d+) (ACCEPT|PAYLOAD) (-?\d+)$")
 CHANNEL_ASSUMPTION = ("authenticated encrypted point-to-point (TLS via "
                       "setup-ssl); required for honest-majority Rep3")
 
+# The pinned canonical case set. Single source of truth for the runner AND the
+# evidence validator's --recompute case-table binding (re-review-3): the validator
+# recomputes each case's input_hash + oracle verdict from THIS list, so replayed
+# duplicates and forged verdict values are rejected.
+CASES = [((0, 0, 1), "sum_even"), ((0, 0, 1), "p1_is_max"),
+         ((2, 0, 0), "p1_is_max"), ((1, 2, 0), "sum_even")]
+
 
 def _sha256_file(path):
     with open(path, "rb") as f:
@@ -186,15 +193,14 @@ def main():
         delivery_sig[q] = d["private_delivery_sig"]
         print(f"[delivery] {q}: private_ok={d['private_ok']} "
               f"leaky_rejected={d['leaky_rejected']} "
-              f"subleak_rejected={d['subleak_rejected']} -> {'PASS' if ok else 'FAIL'}")
+              f"subleak_rejected={d['subleak_rejected']} "
+              f"namespoof_rejected={d['namespoof_rejected']} -> {'PASS' if ok else 'FAIL'}")
         if not ok:
             print("   ", d.get("private_reasons"))
         ok_all = ok_all and ok
 
     # Layer 2+3: strict runtime + bound evidence
-    cases = [((0, 0, 1), "sum_even"), ((0, 0, 1), "p1_is_max"),
-             ((2, 0, 0), "p1_is_max"), ((1, 2, 0), "sum_even")]
-    for secrets, q in cases:
+    for secrets, q in CASES:
         ok, msgs = check_case(secrets, support_weights(secrets), q,
                               f"{secrets}-{q}", delivery_sig[q])
         print(f"[private] secrets={secrets} q={q} -> {'PASS' if ok else 'FAIL'}")
