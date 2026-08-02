@@ -1,23 +1,24 @@
-# STATUS (2026-08-02, staged gate 2 started: private delivery)
+# STATUS (2026-08-02, gate 2 re-review fixes: private delivery)
 
-Issue #4 (functional conformance + evidence gate) PASSED review. Now in staged
-gate 2: adversary/leakage contract + PRIVATE per-recipient delivery. Sigma_T
-persistence is the NEXT gate and is FROZEN until private delivery clears review.
+Gate 2 was REFUTED (issue #5): the stdout checker passed a public-open circuit.
+Fixed. Sigma_T persistence remains UNAUTHORIZED. Conformance suite + evidence
+gate UNCHANGED.
 
-- `conformance/ADVERSARY.md` — threat model, authorized recipients, what is
-  demonstrated (functional) vs NOT claimed (simulation security).
-- `conformance/mpc/threshold_smc_private.mpc` — private build: each
-  (accept_j, payload_j) delivered only to P_j via reveal_to(j)+print_ln_to(j);
-  nothing broadcast; weights not output.
-- `conformance/private_run.py` — launches 3 parties with per-player output,
-  captures each stdout, asserts party j learns only its own verdict and nothing
-  about others. `results-private.txt`: PRIVATE DELIVERY OK.
-- `conformance/test_private.py` — 5 unit tests incl. a negative control proving
-  the checker DETECTS a broadcast leak (passing check is not vacuous).
-- The DEBUG build `threshold_smc.mpc` and the functional conformance suite
-  (`harness.py`, `coverage.py`, evidence gate) are UNCHANGED as the regression gate.
-
-Still no security or performance claim; functional demonstration only.
+- Compiled-delivery inspection (`delivery_inspect.py`): the private build's main
+  tape delivers 6 verdicts via `privateoutput`; the committed leaky sibling
+  (`threshold_smc_leaky.mpc`, reveal()) `asm_open`s them and is REJECTED. The
+  executable public-open negative control a stdout oracle could not provide.
+- Strict per-party parser (`private_run.py`): exactly one own ACCEPT+PAYLOAD;
+  duplicate/foreign/unknown/missing -> fail closed. Reviewer's attacks pinned.
+- Bound raw evidence: per case, each party's raw stdout/stderr/rc/cmd, source
+  hash, delivery signature, provenance, TLS status; validated
+  `validate_evidence.py --private` (fail-closed, --require-bound in CI).
+- `ADVERSARY.md` corrected: standard ideal-functionality (no ADDITIONAL info),
+  one corruption / no collusion / encrypted channels / host isolation,
+  reveal_to vs print_ln_to separated, "no unmasked open" wording,
+  demonstrated-vs-not-claimed downgraded.
+- Tests: 64 conformance / 89 total. Functional + compiled-delivery only; NOT a
+  simulation-security proof.
 
 Original target spec follows.
 

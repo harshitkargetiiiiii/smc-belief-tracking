@@ -1,26 +1,47 @@
 """
-Private-delivery runner + non-recipient-leakage checks (staged gate 2).
+Private-delivery gate (staged gate 2, re-review). Three layers:
 
-Launches the three parties of the PRIVATE build with per-player output enabled
-(-OF .), capturing EACH party's stdout separately. Then asserts that party j's
-cleartext output contains only its own (accept_j, payload_j) and NO other party's
-verdict, and that the debug/broadcast channel semantics are not used here.
+1. COMPILED-DELIVERY inspection (delivery_inspect): the private build must
+   deliver the six verdicts via `privateoutput`, and the leaky sibling must be
+   rejected. A stdout oracle cannot distinguish these; this does.
+2. STRICT per-party runtime check: each party's stdout must contain exactly one
+   own ACCEPT and one own PAYLOAD, no duplicate/foreign/unknown verdict lines;
+   fail closed on missing streams. Cross-party verdicts raise.
+3. BOUND raw evidence: per case, retain each party's raw stdout/stderr, rc, the
+   command, source/delivery hashes, provenance, and encrypted-channel status.
 
-This demonstrates private delivery FUNCTIONALLY (the cleartext verdict reaches
-only the intended party's process). It is NOT a simulation-security proof; see
-ADVERSARY.md. The functional conformance suite (debug build) is unchanged.
+Functional demonstration only; NOT a simulation-security proof (ADVERSARY.md).
 """
+import glob
+import hashlib
 import os
 import re
 import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mpc_run import MPSPDZ, HERE, N, write_inputs, oracle_expect, mpspdz_sha
+from mpc_run import (
+    MPSPDZ, HERE, N, write_inputs, oracle_expect, mpspdz_sha, repo_provenance,
+    _evidence,
+)
+import delivery_inspect
 
 PORT = int(os.environ.get("PRIV_PORT", "15577"))
 _compiled = set()
-PRIV = re.compile(r"^PRIV (\d) (ACCEPT|PAYLOAD) (-?\d+)$")
+PRIV = re.compile(r"^PRIV (\d+) (ACCEPT|PAYLOAD) (-?\d+)$")
+VERDICTISH = re.compile(r"ACCEPT|PAYLOAD|PRIV")
+
+CHANNEL_ASSUMPTION = ("authenticated encrypted point-to-point (TLS via "
+                      "setup-ssl); required for honest-majority Rep3")
+
+
+def _sha256_file(path):
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def tls_certs_present():
+    return len(glob.glob(f"{MPSPDZ}/Player-Data/*.pem")) >= N
 
 
 def _compile(query):
@@ -35,85 +56,150 @@ def _compile(query):
 
 
 def run_private(secrets, weight_vectors, query, port=None):
-    """Run all 3 parties, return {party: stdout_text}. Fail closed on any
-    non-zero exit."""
+    """Run all 3 parties; return {j: {stdout, stderr, rc, cmd}}. Fail closed."""
     port = port or PORT
     write_inputs(secrets, weight_vectors)
     _compile(query)
     prog = f"threshold_smc_private-{query}"
-    procs, outs = [], {}
+    procs, res = [], {}
     for i in range(N):
-        p = subprocess.Popen(
-            [f"{MPSPDZ}/replicated-ring-party.x", str(i), prog,
-             "-pn", str(port), "-h", "localhost", "-OF", "."],
-            cwd=MPSPDZ, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        procs.append(p)
-    for i, p in enumerate(procs):
+        cmd = [f"{MPSPDZ}/replicated-ring-party.x", str(i), prog,
+               "-pn", str(port), "-h", "localhost", "-OF", "."]
+        p = subprocess.Popen(cmd, cwd=MPSPDZ, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, text=True)
+        procs.append((cmd, p))
+    for i, (cmd, p) in enumerate(procs):
         out, err = p.communicate(timeout=120)
-        outs[i] = out
-        if p.returncode != 0:
-            raise RuntimeError(f"party {i} failed ({p.returncode}):\n{err}\n{out}")
-    return outs
+        res[i] = {"stdout": out, "stderr": err, "rc": p.returncode, "cmd": cmd}
+    for i in range(N):
+        if res[i]["rc"] != 0:
+            raise RuntimeError(f"party {i} failed ({res[i]['rc']}):\n{res[i]['stderr']}")
+    return res
 
 
-def parse_party(text):
-    """Return {'ACCEPT': {j: v}, 'PAYLOAD': {j: v}} of PRIV records in one
-    party's stdout. Records for a party index other than this stream are a leak."""
+def strict_parse_party(text, own_j):
+    """Return {'ACCEPT': v, 'PAYLOAD': v} for party own_j's OWN stream, or raise.
+    Any verdict-like line that is not a well-formed own PRIV record -> raise
+    (foreign index, duplicate, malformed, unknown). Missing records -> raise."""
+    records = {}
+    for raw in text.splitlines():
+        s = raw.strip()
+        if not s:
+            continue
+        if not VERDICTISH.search(s):
+            continue                                   # framework noise
+        m = PRIV.match(s)
+        if not m:
+            raise ValueError(f"unrecognized verdict-like line: {s!r}")
+        j, kind, val = int(m.group(1)), m.group(2), int(m.group(3))
+        if j != own_j:
+            raise ValueError(f"foreign verdict for party {j} in party {own_j} stream")
+        if kind in records:
+            raise ValueError(f"duplicate {kind} in party {own_j} stream")
+        records[kind] = val
+    if set(records) != {"ACCEPT", "PAYLOAD"}:
+        raise ValueError(f"party {own_j}: expected one ACCEPT + one PAYLOAD, "
+                         f"got {sorted(records)}")
+    return records
+
+
+def evaluate_privacy(outs, exp_acc, exp_pay):
+    """Strict per-party check. `outs` maps j -> stdout text (or the run dict).
+    Returns list of failure messages ([] == clean)."""
+    msgs = []
+    for j in range(N):
+        text = outs[j]["stdout"] if isinstance(outs[j], dict) else outs[j]
+        try:
+            got = strict_parse_party(text, j)
+        except ValueError as e:
+            msgs.append(f"party {j}: {e}")
+            continue
+        if got["ACCEPT"] != exp_acc[j]:
+            msgs.append(f"party {j} own ACCEPT {got['ACCEPT']} != {exp_acc[j]}")
+        if got["PAYLOAD"] != exp_pay[j]:
+            msgs.append(f"party {j} own PAYLOAD {got['PAYLOAD']} != {exp_pay[j]}")
+    return msgs
+
+
+def parse_party(text):                                 # kept for unit tests
     got = {"ACCEPT": {}, "PAYLOAD": {}}
     for line in text.splitlines():
         m = PRIV.match(line.strip())
         if m:
-            j, kind, val = int(m.group(1)), m.group(2), int(m.group(3))
-            got[kind][j] = val
+            got[m.group(2)][int(m.group(1))] = int(m.group(3))
     return got
 
 
-def evaluate_privacy(outs, exp_acc, exp_pay):
-    """Pure check (no MPC): each party learns exactly its own verdict and
-    NOTHING about any other party. Returns a list of mismatch/leak messages.
-    Factored out so the leakage logic is unit-testable with synthetic streams."""
-    msgs = []
-    for j in range(N):
-        got = parse_party(outs[j])
-        if got["ACCEPT"].get(j) != exp_acc[j]:
-            msgs.append(f"party {j} own ACCEPT {got['ACCEPT'].get(j)} != {exp_acc[j]}")
-        if got["PAYLOAD"].get(j) != exp_pay[j]:
-            msgs.append(f"party {j} own PAYLOAD {got['PAYLOAD'].get(j)} != {exp_pay[j]}")
-        leaked = [k for k in range(N) if k != j
-                  and (k in got["ACCEPT"] or k in got["PAYLOAD"])]
-        if leaked:
-            msgs.append(f"party {j} LEAK: learned verdicts of {leaked}")
-    return msgs
-
-
-def check_private(secrets, weight_vectors, query):
-    """Assert per-recipient privacy against the oracle. Returns (ok, messages)."""
+def check_case(secrets, weight_vectors, query, case_id, delivery_sig):
     exp_acc, exp_pay, _, _ = oracle_expect(secrets, weight_vectors, query)
-    outs = run_private(secrets, weight_vectors, query)
-    msgs = evaluate_privacy(outs, exp_acc, exp_pay)
+    sha, src, bound = repo_provenance()
+    ih = hashlib.sha256(repr((secrets, weight_vectors, query)).encode()).hexdigest()
+    rec = {
+        "repo_sha": sha, "repo_sha_source": src, "bound": bound,
+        "mpspdz_sha": mpspdz_sha(), "query": query, "case_id": case_id,
+        "input_hash": ih,
+        "source_sha256": _sha256_file(f"{HERE}/mpc/threshold_smc_private.mpc"),
+        "delivery_sig": delivery_sig, "delivery_private_ok": True,
+        "tls_certs_present": tls_certs_present(),
+        "channel_assumption": CHANNEL_ASSUMPTION,
+        "privacy_ok": False, "mismatches": None, "error": None, "final": "FAIL",
+    }
+    try:
+        res = run_private(secrets, weight_vectors, query)
+    except Exception as e:
+        rec["error"] = repr(e)
+        _evidence(rec)
+        raise
+    for j in range(N):
+        rec[f"party{j}_rc"] = res[j]["rc"]
+        rec[f"party{j}_stdout"] = res[j]["stdout"]
+        rec[f"party{j}_stderr"] = res[j]["stderr"]
+        rec[f"party{j}_cmd"] = " ".join(res[j]["cmd"])
+    msgs = evaluate_privacy(res, exp_acc, exp_pay)
+    rec["privacy_ok"] = not msgs
+    rec["mismatches"] = msgs
+    rec["final"] = "PASS" if not msgs else "FAIL"
+    _evidence(rec)
     return (not msgs), msgs
 
 
-if __name__ == "__main__":
+def support_weights(secrets):
+    from mpc_run import S, state
+    return [[1 if state(i)[j] == secrets[j] else 0 for i in range(S)]
+            for j in range(N)]
+
+
+def main():
     print(f"MP-SPDZ commit under test: {mpspdz_sha()}")
+    print(f"TLS certs present: {tls_certs_present()}")
+    ok_all = True
 
-    def support_weights(secrets):
-        from mpc_run import S, state
-        out = []
-        for j in range(N):
-            w = [1 if state(idx)[j] == secrets[j] else 0 for idx in range(S)]
-            out.append(w)
-        return out
+    # Layer 1: compiled-delivery inspection + executable public-open negative control
+    delivery_sig = {}
+    for q in ("sum_even", "p1_is_max"):
+        ok, d = delivery_inspect.gate(q)
+        delivery_sig[q] = d["private_delivery_sig"]
+        print(f"[delivery] {q}: private_ok={d['private_ok']} "
+              f"leaky_rejected={d['leaky_rejected']} -> {'PASS' if ok else 'FAIL'}")
+        if not ok:
+            print("   ", d.get("private_reasons"))
+        ok_all = ok_all and ok
 
+    # Layer 2+3: strict runtime + bound evidence
     cases = [((0, 0, 1), "sum_even"), ((0, 0, 1), "p1_is_max"),
              ((2, 0, 0), "p1_is_max"), ((1, 2, 0), "sum_even")]
-    allok = True
     for secrets, q in cases:
-        ok, msgs = check_private(secrets, support_weights(secrets), q)
+        ok, msgs = check_case(secrets, support_weights(secrets), q,
+                              f"{secrets}-{q}", delivery_sig[q])
         print(f"[private] secrets={secrets} q={q} -> {'PASS' if ok else 'FAIL'}")
         for m in msgs:
             print("    ", m)
-        allok = allok and ok
+        ok_all = ok_all and ok
+
     print("=" * 56)
-    print("PRIVATE DELIVERY OK" if allok else "PRIVATE DELIVERY FAILED")
-    sys.exit(0 if allok else 1)
+    print("PRIVATE DELIVERY OK" if ok_all else "PRIVATE DELIVERY FAILED")
+    sys.exit(0 if ok_all else 1)
+
+
+if __name__ == "__main__":
+    main()

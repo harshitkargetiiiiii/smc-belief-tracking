@@ -631,3 +631,25 @@ open until someone with actual MPC expertise addresses them.
   gate UNCHANGED. Sigma_T persistence NOT started. Functional demonstration only;
   no simulation-security claim.
 - **Status:** `open` (awaiting review of the private-delivery gate)
+
+### R-41 — Gate 2 REFUTED: stdout checker passed a public-open circuit
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, gate-2 review, issue #5
+- **Objection:** Mutating `reveal_to(j)` -> `reveal()` (leaving print_ln_to)
+  compiles to a public `asm_open` of all six verdicts, yet `private_run.py`
+  reported PRIVATE DELIVERY OK. A stdout oracle cannot distinguish private output
+  from public open + hidden printing; the gate was vacuous at the privacy
+  boundary. Parser also non-strict (ignored unknown lines, overwrote duplicates);
+  no bound raw per-party evidence; ADVERSARY.md ideal-functionality/channel
+  wording wrong.
+- **Assessment:** Correct and decisive.
+- **Resolution:** (1) `delivery_inspect.py` inspects the compiled main tape:
+  private build must use `privateoutput` to [0,0,1,1,2,2] with no public open;
+  committed leaky sibling `threshold_smc_leaky.mpc` is REJECTED (executable
+  negative control). (2) strict fail-closed per-party parser with regressions for
+  duplicate/foreign/unknown/missing/reviewer-exact-attack. (3) per-case bound raw
+  evidence (party stdout/stderr/rc/cmd, source+delivery hashes, TLS, provenance)
+  validated by `validate_evidence.py --private`, --require-bound in CI, raw
+  retained. (4) ADVERSARY.md corrected on all six points + channel assumption.
+- **Status:** `open` (awaiting gate-2 re-review)

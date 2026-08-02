@@ -124,6 +124,68 @@ def validate(path, count, repo=None, mpspdz=None, require_bound=False):
     return errs
 
 
+_PRIV_REQUIRED = (
+    "repo_sha", "repo_sha_source", "bound", "mpspdz_sha", "query", "case_id",
+    "input_hash", "source_sha256", "delivery_sig", "delivery_private_ok",
+    "tls_certs_present", "channel_assumption", "privacy_ok", "mismatches",
+    "error", "final",
+) + tuple(f"party{j}_{k}" for j in range(3)
+          for k in ("rc", "stdout", "stderr", "cmd"))
+
+
+def validate_private(path, count, repo=None, mpspdz=None, require_bound=False):
+    """Validate private-delivery evidence: complete records, PASS invariant,
+    private compiled delivery, TLS certs, all party rcs 0, unique case IDs."""
+    errs = []
+    try:
+        with _open(path) as f:
+            records = [json.loads(line) for line in f if line.strip()]
+    except FileNotFoundError:
+        return [f"missing evidence file: {path}"]
+    if len(records) != count:
+        errs.append(f"{path}: expected {count} records, found {len(records)}")
+    seen = set()
+    for i, r in enumerate(records):
+        tag = f"{path}[{i}]"
+        for k in _PRIV_REQUIRED:
+            if k not in r:
+                errs.append(f"{tag}: missing field {k}")
+        if r.get("final") != "PASS":
+            errs.append(f"{tag}: final={r.get('final')!r}")
+        if r.get("privacy_ok") is not True:
+            errs.append(f"{tag}: privacy_ok not True")
+        if r.get("delivery_private_ok") is not True:
+            errs.append(f"{tag}: delivery_private_ok not True")
+        if r.get("tls_certs_present") is not True:
+            errs.append(f"{tag}: tls_certs_present not True")
+        if r.get("mismatches") != []:
+            errs.append(f"{tag}: mismatches not empty")
+        if r.get("error") is not None:
+            errs.append(f"{tag}: error not null")
+        for j in range(3):
+            if r.get(f"party{j}_rc") != 0:
+                errs.append(f"{tag}: party{j}_rc={r.get(f'party{j}_rc')}")
+        for k in ("source_sha256", "delivery_sig", "input_hash"):
+            v = r.get(k)
+            if not (isinstance(v, str) and _HEX64.match(v)):
+                errs.append(f"{tag}: {k} not 64-hex")
+        cid = r.get("case_id")
+        if not cid or cid in seen:
+            errs.append(f"{tag}: bad/duplicate case_id {cid!r}")
+        else:
+            seen.add(cid)
+        if repo is not None and r.get("repo_sha") != repo:
+            errs.append(f"{tag}: repo_sha {r.get('repo_sha')} != {repo}")
+        if mpspdz is not None and r.get("mpspdz_sha") != mpspdz:
+            errs.append(f"{tag}: mpspdz_sha {r.get('mpspdz_sha')} != {mpspdz}")
+        if require_bound:
+            if r.get("bound") is not True:
+                errs.append(f"{tag}: not bound")
+            if r.get("repo_sha_source") != "github_actions":
+                errs.append(f"{tag}: bound but source={r.get('repo_sha_source')!r}")
+    return errs
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("path")
@@ -131,8 +193,11 @@ def main():
     ap.add_argument("--repo")
     ap.add_argument("--mpspdz")
     ap.add_argument("--require-bound", action="store_true")
+    ap.add_argument("--private", action="store_true",
+                    help="validate private-delivery evidence schema")
     a = ap.parse_args()
-    errs = validate(a.path, a.count, a.repo, a.mpspdz, a.require_bound)
+    fn = validate_private if a.private else validate
+    errs = fn(a.path, a.count, a.repo, a.mpspdz, a.require_bound)
     if errs:
         print(f"EVIDENCE INVALID: {a.path}")
         for e in errs[:30]:

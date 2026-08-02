@@ -1,59 +1,86 @@
-# Adversary / leakage contract (staged gate 2)
+# Adversary / leakage contract (staged gate 2, corrected after re-review)
 
-Scope of this phase: the adversary model, the authorized recipients, and PRIVATE
-per-recipient delivery of `(accept_j, payload_j)`. Persistent `Sigma_T`
-secret-sharing across invocations is the NEXT phase and is out of scope here.
+Scope: adversary model, authorized recipients, and PRIVATE per-recipient
+delivery of `(accept_j, payload_j)`. Persistent `Sigma_T` secret-sharing across
+invocations is the NEXT gate and is out of scope / unauthorized.
 
-## Parties and threat model
+## Parties, corruption, channels
 
-- `N = 3` parties `P_0, P_1, P_2`, semi-honest (honest-but-curious): each follows
-  the protocol but tries to learn more from its view. Matches PLAS 2012's model.
-- Honest majority, replicated secret sharing over `Z_2^64` (MP-SPDZ Rep3).
-- **No collusion** is assumed for the leakage claim below (two colluding parties
-  pooling views is out of scope and must be stated as a limitation).
+- `N = 3` parties, semi-honest (honest-but-curious). PLAS 2012's model. A party's
+  VIEW is its local state plus the messages it sends and receives.
+- Replicated secret sharing over `Z_2^64` (MP-SPDZ Rep3), honest majority.
+- **At most one corrupted party; no collusion.** Two colluding parties pooling
+  views is out of scope.
+- **Authenticated, encrypted point-to-point channels (TLS).** Honest-majority
+  Rep3 REQUIRES this: MP-SPDZ's own docs warn a network eavesdropper can
+  otherwise reconstruct secrets. CI runs `setup-ssl.sh 3`; evidence records
+  `tls_certs_present` and the channel assumption per case.
+- **Process / host isolation.** NOTE: the test harness runs all three parties as
+  one OS user on one host sharing the input directory. That is NOT an
+  adversarially isolated deployment; the isolation assumption is stated, not
+  enforced by the test.
 
-## Authorized recipients
+## Ideal functionality (authorized information)
 
-- The query `Q`, domain `D`, and public thresholds are public.
-- For each `j`, party `P_j` is the SOLE authorized recipient of its own pair
-  `(accept_j, payload_j)`. `payload_j = o_actual` if `accept_j` else a fixed
-  `MASK = 0`.
-- **No party may learn any other party's `accept_k` or `payload_k`** (PLAS Sec
-  4.4: an observed rejection of another party leaks about secrets).
-- Belief weights (`Sigma_T`) are secret and are NOT delivered to anyone in this
-  phase; they are neither broadcast nor revealed.
+A corrupted party `P_k` learns **no additional information beyond**: the public
+parameters (`Q`, domain, public thresholds), its own input, and its own
+authorized output `(accept_k, payload_k)`. Anything `P_k` can logically infer
+from those is not — and cannot be — prohibited. `payload_k = o_actual` if
+`accept_k` else a fixed `MASK = 0`. This replaces the earlier, wrong phrasing
+"no party may learn another party's output."
 
-## What the private build does
+## Mechanisms (kept separate)
 
-`mpc/threshold_smc_private.mpc` computes the same verdicts as the debug build,
-then delivers each pair with `reveal_to(j)` + `print_ln_to(j, ...)`, so only
-party `j`'s process prints its own `(accept_j, payload_j)`. Nothing is broadcast;
-weights are not output.
+- `reveal_to(j)` is the PRIVATE-OUTPUT protocol: at pinned MP-SPDZ it compiles to
+  `privateoutput`, delivering the missing replicated share only to `P_j`.
+- `print_ln_to(j, ...)` only gates LOCAL PRINTING; it is not a privacy mechanism.
+  A build could `reveal()` publicly and still `print_ln_to(j, ...)` — that is the
+  leaky sibling, and it must be REJECTED (see below).
 
-## What is DEMONSTRATED vs what is NOT
+## What is opened vs delivered
 
-- **Demonstrated (functional):** running all three parties with per-player output
-  (`-OF .`) and capturing each stdout separately, party `j`'s cleartext stream
-  contains exactly its own verdict and NO record of any other party
-  (`private_run.py`, `test_private.py` incl. a negative control that the checker
-  detects a broadcast leak).
-- **NOT demonstrated / NOT claimed:** simulation-based security. A functional
-  test can catch gross leakage (a broadcast) but cannot prove that a party's full
-  protocol view (shares, timing, network) is simulatable from its authorized
-  output alone. That requires a protocol-level argument and a human MPC
-  specialist. No security claim is made from these tests.
-- The `reveal_to`/`print_ln_to` mechanism relies on MP-SPDZ's per-player output
-  gating; the guarantee is only as strong as that mechanism and the semi-honest,
-  non-colluding assumption.
+- No **unmasked** final verdict, payload, or belief weight is publicly opened.
+  (The comparison machinery does have protocol `open`s of MASKED intermediates in
+  the EQZ/LTZ subroutines; those are not the final verdicts.)
+- The six final verdict wires are delivered via `privateoutput`, one authorized
+  pair per party.
+
+## What is DEMONSTRATED (this gate) vs NOT claimed
+
+Demonstrated, executably:
+
+1. **Compiled delivery** (`delivery_inspect.py`): the private build's MAIN tape
+   delivers the six verdicts via `privateoutput` to players `[0,0,1,1,2,2]` and
+   has NO public open; the intentionally leaky sibling (`reveal()` +
+   `print_ln_to`) is REJECTED because its main tape `asm_open`s the verdicts. A
+   stdout oracle cannot make this distinction; this compiler-level check can.
+2. **Strict runtime** (`private_run.py`): each party's captured stdout contains
+   exactly one own `ACCEPT` and one own `PAYLOAD` under a fail-closed parser that
+   rejects duplicate / foreign-index / unknown / missing records.
+3. **Bound raw evidence**: per case, each party's raw stdout/stderr, return code,
+   command, source hash, delivery signature, provenance, and TLS status are
+   retained and validated (`validate_evidence.py --private`).
+
+NOT claimed:
+
+- **Simulation-based security.** A functional + compiled-delivery check catches
+  gross public opening and cleartext cross-party printing. It does NOT prove that
+  a corrupted party's FULL view (shares, timing, network) is simulatable from its
+  authorized output alone. That needs a protocol-level Rep3 argument and a human
+  MPC specialist. No security claim is made from these tests.
+- Any guarantee under collusion, a malicious party, unencrypted channels, or a
+  shared-host adversary.
 
 ## Builds
 
 - `threshold_smc.mpc` — DEBUG/CONFORMANCE build: broadcasts verdicts + weights
-  via `reveal()` for test-only reconstruction. Used by the UNCHANGED functional
-  conformance suite (`harness.py`, `coverage.py`) as the regression gate.
-- `threshold_smc_private.mpc` — PRIVATE-DELIVERY build: this phase.
+  via `reveal()` for test-only reconstruction. The UNCHANGED functional
+  conformance suite uses it as the regression gate.
+- `threshold_smc_private.mpc` — PRIVATE-DELIVERY build (this gate).
+- `threshold_smc_leaky.mpc` — INTENTIONALLY LEAKY negative control: `reveal()` +
+  `print_ln_to`. Committed so the gate can prove it rejects public opening.
 
-## Next phase (frozen until this clears review)
+## Next gate (unauthorized until this clears)
 
 Persistent `Sigma_T`: keep updated beliefs secret-shared across invocations
 without plaintext reconstruction/re-input, with multi-invocation persistence
