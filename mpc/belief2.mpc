@@ -1,0 +1,46 @@
+import sys
+DOM  = int(program.args[1]) if len(program.args)>1 else 91
+FB   = int(program.args[2]) if len(program.args)>2 else 16
+KB   = int(program.args[3]) if len(program.args)>3 else 31
+NEAR = (len(program.args)>4 and program.args[4]=='near')
+LO = 10
+N  = DOM*DOM
+sfix.set_precision(FB, KB)
+if NEAR: sfix.round_nearest = True
+
+x1 = sint.get_input_from(0); x2 = sint.get_input_from(1); x3 = sint.get_input_from(2)
+prior = sfix.Array(N); prior.assign_all(sfix(1.0/N))
+
+dom = cint.Array(DOM)
+@for_range(DOM)
+def _(v): dom[v] = LO+v
+ge = sint.Array(DOM)
+@for_range(DOM)
+def _(v): ge[v] = (x1 >= dom[v])
+
+o = (x1>=x2)*(x1>=x3)
+q = sint.Array(N)
+@for_range(DOM)
+def _(i): q.assign(ge[i]*ge.get_vector(), i*DOM)
+qv = q.get_vector(); ov = o.expand_to_vector(N)
+ind = 1 - qv - ov + 2*(qv*ov)
+w = sfix.Array(N)
+w.assign(prior.get_vector() * sfix._new(ind*(1<<sfix.f)))
+Z = sum(w)
+marg = sfix.Array(DOM)
+@for_range(DOM)
+def _(i): marg[i] = sum(w.get_vector(i*DOM, DOM))
+
+# tournament max: log2(DOM) rounds, DOM-1 comparisons
+cur = list(marg)
+while len(cur) > 1:
+    nxt = []
+    pairs = [(cur[i], cur[i+1]) for i in range(0, len(cur)-1, 2)]
+    if len(cur) % 2: nxt.append(cur[-1])
+    a = sfix(0)
+    bits = [(p[0] > p[1]) for p in pairs]
+    nxt = [b.if_else(p[0], p[1]) for b,p in zip(bits,pairs)] + nxt
+    cur = nxt
+M = cur[0]
+verdict = (M <= sfix(0.2)*Z)
+print_ln('%s', verdict.reveal())

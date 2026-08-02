@@ -1,0 +1,38 @@
+# FULL JOINT over D^3 : the general (unfactored) belief-tracking cost.
+DOM = int(program.args[1]); FB=int(program.args[2]); KB=int(program.args[3])
+LO=10; N=DOM**3
+sfix.set_precision(FB,KB)
+x=[sint.get_input_from(i) for i in range(3)]
+prior=sfix.Array(N); prior.assign_all(sfix(1.0/N))
+domv=cint(regint.inc(DOM,LO))
+# q(s) for every state s=(s1,s2,s3): [s1>=s2]&[s1>=s3]  -- PUBLIC (query is public)
+# only the observed output o is secret, so the indicator is LINEAR in o.
+import itertools
+qpub=cint.Array(N)
+qv=regint.Array(N)
+@for_range(DOM)
+def _(a):
+    @for_range(DOM)
+    def _(b):
+        base=(a*DOM+b)*DOM
+        ge_ab = (a>=b)
+        @for_range(DOM)
+        def _(c): qv[base+c] = ge_ab * (a>=c)
+o = (x[0]>=x[1])*(x[0]>=x[2])
+ov=o.expand_to_vector(N)
+qc=cint.Array(N); qc.assign(qv.get_vector())
+qcv=qc.get_vector()
+ind = 1 - qcv - ov + 2*(qcv*ov)          # public*secret -> FREE
+w = sfix._new(prior.get_vector().v * ind, k=sfix.k, f=sfix.f)
+wa=sfix.Array(N); wa.assign(w)
+Z=sum(wa)
+marg=sfix.Array(DOM)
+@for_range(DOM)
+def _(i): marg[i]=sum(wa.get_vector(i*DOM*DOM, DOM*DOM))
+cur=marg.get_vector(); n=DOM
+while n>1:
+    h=n//2; a=cur.get_vector(0,h); b=cur.get_vector(h,h)
+    t=sfix.Array(n-h); t.assign((a>b).if_else(a,b))
+    if n%2: t[h]=cur.get_vector(2*h,1)
+    cur=t.get_vector(); n=n-h
+print_ln('%s',(cur.get_vector(0,1) <= sfix(0.2)*Z).reveal())

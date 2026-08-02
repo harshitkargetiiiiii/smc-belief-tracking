@@ -1,0 +1,112 @@
+name: benchmark
+
+# Runs the correctness tests on every push, and the full MPC benchmark sweep on
+# demand or weekly. The MPC job builds MP-SPDZ from source (~8 min cold, cached
+# afterwards), so it is deliberately not on the push path.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: "Domain size (91 = the PLAS 2012 benchmark)"
+        default: "91"
+      rounds:
+        description: "Sequential revision rounds"
+        default: "1"
+  schedule:
+    - cron: "0 6 * * 1"          # Mondays 06:00 UTC
+
+jobs:
+
+  # ---------------------------------------------------------------------
+  # Fast: the exact-rational reference. This is the gate that matters.
+  # ---------------------------------------------------------------------
+  reference:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      - name: Reference test suite
+        run: python3 -m pytest reference/ -v
+
+  # ---------------------------------------------------------------------
+  # Slow: build MP-SPDZ and run the circuit.
+  # ---------------------------------------------------------------------
+  mpc:
+    runs-on: ubuntu-latest
+    needs: reference
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        # Network conditions emulated with `tc netem` on loopback.
+        # NOTE: this is emulation on a single host, not geographically
+        # separate machines. Any paper using these numbers must say so.
+        network:
+          - { name: localhost, delay: "0ms",  rate: "" }
+          - { name: lan,       delay: "0.2ms", rate: "1gbit" }
+          - { name: wan,       delay: "50ms",  rate: "100mbit" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache MP-SPDZ build
+        id: cache-mpspdz
+        uses: actions/cache@v4
+        with:
+          path: MP-SPDZ
+          key: mpspdz-${{ runner.os }}-v0.4.3-replicated
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libgmp-dev libsodium-dev libssl-dev libboost-dev \
+            libboost-thread-dev libboost-filesystem-dev libboost-iostreams-dev \
+            iproute2
+
+      - name: Build MP-SPDZ
+        if: steps.cache-mpspdz.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 https://github.com/data61/MP-SPDZ
+          cd MP-SPDZ
+          make -j$(nproc) replicated-ring-party.x
+          Scripts/setup-ssl.sh 3
+
+      - name: Stage circuits
+        run: cp mpc/*.mpc MP-SPDZ/Programs/Source/
+
+      - name: Apply network conditions
+        if: matrix.network.delay != '0ms'
+        run: |
+          # netem needs NET_ADMIN; GitHub runners grant it via sudo.
+          # If this step fails the emulation is not happening -- do not
+          # silently fall through and report the numbers as LAN/WAN.
+          sudo tc qdisc add dev lo root netem \
+            delay ${{ matrix.network.delay }} \
+            ${{ matrix.network.rate && format('rate {0}', matrix.network.rate) || '' }}
+          tc qdisc show dev lo
+
+      - name: Compile and run
+        working-directory: MP-SPDZ
+        run: |
+          set -o pipefail
+          DOM=${{ github.event.inputs.domain || '91' }}
+          ./compile.py -R 64 belief3 "$DOM" 16 31 2>&1 | tail -20
+          Scripts/ring.sh "belief3-$DOM-16-31" 2>&1 | tee ../result-${{ matrix.network.name }}.txt
+
+      - name: Remove network conditions
+        if: always() && matrix.network.delay != '0ms'
+        run: sudo tc qdisc del dev lo root || true
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-${{ matrix.network.name }}
+          path: result-*.txt

@@ -1,0 +1,67 @@
+# SMC belief tracking, one update step.
+# 3 parties, secrets x1,x2,x3 in D = {10..100}, |D| = 91.
+# Observer P1 holds a joint belief over (x2,x3): 91*91 = 8281 states.
+# Query Q1 "am I (P1) the richest?"  o = (x1>=x2) & (x1>=x3)
+# Everything below is secret: the actual x_i, the output o, the prior, the verdict.
+
+DOM = 91
+LO  = 10
+N   = DOM * DOM
+
+sfix.set_precision(16, 31)
+
+x1 = sint.get_input_from(0)
+x2 = sint.get_input_from(1)
+x3 = sint.get_input_from(2)
+
+# prior belief of P1 over (x2,x3), secret (carried from previous rounds)
+prior = sfix.Array(N)
+prior.assign_all(sfix(1.0 / N))
+
+# ---- step 1: comparison bits (x1 >= v) for every v in D  -> 91 secure comparisons
+dom = cint.Array(DOM)
+@for_range(DOM)
+def _(v):
+    dom[v] = LO + v
+ge = sint.Array(DOM)
+@for_range(DOM)
+def _(v):
+    ge[v] = (x1 >= dom[v])
+
+# ---- step 2: actual (secret) query output on the real secrets
+o = (x1 >= x2) * (x1 >= x3)
+
+# ---- step 3: per-state indicator  [Q(x1,s2,s3) == o]
+#      q_s = ge[i]*ge[j] ; ind = q_s*o + (1-q_s)*(1-o) = 1 - q_s - o + 2*q_s*o
+q = sint.Array(N)
+@for_range(DOM)
+def _(i):
+    q.assign(ge[i] * ge.get_vector(), i * DOM)
+qv  = q.get_vector()
+ind = 1 - qv - o.expand_to_vector(N) + 2 * (qv * o.expand_to_vector(N))
+
+# ---- step 4: weights = prior * indicator   (N secret multiplications)
+w = sfix.Array(N)
+w.assign(prior.get_vector() * sfix._new(ind * (1 << sfix.f)))
+
+# ---- step 5: normaliser and marginal over x2 (all linear, free)
+Z = sfix(0)
+Z = sum(w)
+marg = sfix.Array(DOM)
+@for_range(DOM)
+def _(i):
+    marg[i] = sum(w.get_vector(i * DOM, DOM))
+
+# ---- step 6: max of the 91 marginals  -> 90 secure comparisons + selects
+m = sfix.Array(DOM)
+m.assign(marg)
+@for_range(DOM - 1)
+def _(i):
+    b = m[i + 1] > m[0]
+    m[0] = b.if_else(m[i + 1], m[0])
+M = m[0]
+
+# ---- step 7: threshold test  M <= t*Z   (t public -> no division needed)
+t = 0.2
+verdict = (M <= sfix(t) * Z)
+print_ln('%s', verdict.reveal())

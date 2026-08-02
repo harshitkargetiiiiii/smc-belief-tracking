@@ -1,0 +1,57 @@
+# Fully vectorised / round-optimised SMC belief-tracking update.
+DOM  = int(program.args[1]) if len(program.args)>1 else 91
+FB   = int(program.args[2]) if len(program.args)>2 else 16
+KB   = int(program.args[3]) if len(program.args)>3 else 31
+NEAR = 'near' in program.args
+LO = 10
+N  = DOM*DOM
+sfix.set_precision(FB, KB)
+if NEAR: sfix.round_nearest = True
+
+x1 = sint.get_input_from(0); x2 = sint.get_input_from(1); x3 = sint.get_input_from(2)
+prior = sfix.Array(N); prior.assign_all(sfix(1.0/N))
+
+# 1. batched comparison bits  (x1 >= v) for all v in D : ONE vectorised comparison
+domv = cint(regint.inc(DOM, LO))
+ge   = (x1.expand_to_vector(DOM) >= domv)          # sint vector, length DOM
+
+# 2. true (secret) output on the real inputs
+o = (x1>=x2)*(x1>=x3)
+
+# 3. outer product ge_i * ge_j over all N states : ONE vectorised multiplication
+gm = sint.Array(DOM); gm.assign(ge)
+repA = sint.Array(N); tilA = sint.Array(N)
+@for_range(DOM)
+def _(i): repA.assign(gm[i].expand_to_vector(DOM), i*DOM)
+@for_range(DOM)
+def _(i): tilA.assign(gm.get_vector(), i*DOM)
+q  = repA.get_vector() * tilA.get_vector()
+ov = o.expand_to_vector(N)
+ind = 1 - q - ov + 2*(q*ov)
+
+# 4. reweight : ONE vectorised fixed-point multiplication of length N
+w = sfix._new(prior.get_vector().v * ind, k=sfix.k, f=sfix.f)   # ind is 0/1 -> no truncation needed
+wa = sfix.Array(N); wa.assign(w)
+
+# 5. normaliser + marginal (linear, free)
+Z = sum(wa)
+marg = sfix.Array(DOM)
+@for_range(DOM)
+def _(i): marg[i] = sum(wa.get_vector(i*DOM, DOM))
+
+# 6. tournament max, vectorised per level : ~log2(DOM) round-groups
+cur = marg.get_vector()
+n = DOM
+while n > 1:
+    h = n // 2
+    a = cur.get_vector(0, h); b = cur.get_vector(h, h)
+    bit = a > b
+    nxt = bit.if_else(a, b)
+    tmp = sfix.Array(n - h)
+    tmp.assign(nxt)
+    if n % 2:
+        tmp[h] = cur.get_vector(2*h, 1)
+    cur = tmp.get_vector(); n = n - h
+M = cur.get_vector(0,1)
+verdict = (M <= sfix(0.2)*Z)
+print_ln('%s', verdict.reveal())

@@ -1,0 +1,44 @@
+# Multi-round belief revision WITH renormalisation (secure division) -- the honest version.
+DOM  = int(program.args[1]) if len(program.args)>1 else 91
+FB   = int(program.args[2]) if len(program.args)>2 else 16
+KB   = int(program.args[3]) if len(program.args)>3 else 31
+ROUNDS = int(program.args[4]) if len(program.args)>4 else 1
+LO = 10
+N  = DOM*DOM
+sfix.set_precision(FB, KB)
+
+x1 = sint.get_input_from(0); x2 = sint.get_input_from(1); x3 = sint.get_input_from(2)
+prior = sfix.Array(N); prior.assign_all(sfix(1.0/N))
+
+domv = cint(regint.inc(DOM, LO))
+ge   = (x1.expand_to_vector(DOM) >= domv)
+gm = sint.Array(DOM); gm.assign(ge)
+repA = sint.Array(N); tilA = sint.Array(N)
+@for_range(DOM)
+def _(i): repA.assign(gm[i].expand_to_vector(DOM), i*DOM)
+@for_range(DOM)
+def _(i): tilA.assign(gm.get_vector(), i*DOM)
+q  = repA.get_vector() * tilA.get_vector()
+
+for r in range(ROUNDS):
+    o = (x1 >= x2 + r)*(x1 >= x3 + r)
+    ov = o.expand_to_vector(N)
+    ind = 1 - q - ov + 2*(q*ov)
+    w = sfix._new(prior.get_vector().v * ind, k=sfix.k, f=sfix.f)
+    wa = sfix.Array(N); wa.assign(w)
+    Z = sum(wa)
+    inv = sfix(1) / Z                      # one secure reciprocal per round
+    prior.assign(wa.get_vector() * inv.expand_to_vector(N))   # N truncated fp mults
+
+marg = sfix.Array(DOM)
+@for_range(DOM)
+def _(i): marg[i] = sum(prior.get_vector(i*DOM, DOM))
+cur = marg.get_vector(); n = DOM
+while n > 1:
+    h = n//2
+    a = cur.get_vector(0,h); b = cur.get_vector(h,h)
+    nxt = (a>b).if_else(a,b)
+    tmp = sfix.Array(n-h); tmp.assign(nxt)
+    if n%2: tmp[h] = cur.get_vector(2*h,1)
+    cur = tmp.get_vector(); n = n-h
+print_ln('%s', (cur.get_vector(0,1) <= sfix(0.2)).reveal())
