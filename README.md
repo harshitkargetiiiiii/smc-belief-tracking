@@ -22,18 +22,31 @@ both unreachable at the time — so **confirm this before claiming it anywhere.*
 
 This repository is an attempt at that implementation.
 
-## Status: early prototype, unreviewed
+## Status: claims refuted, do not build on this
 
-Read this before using any number below.
+An external adversarial review on 2026-08-02 refuted all three claims this
+project rested on. See [issue #1](https://github.com/harshitkargetiiiiii/smc-belief-tracking/issues/1),
+`docs/claims.md` (what we got wrong) and `docs/gap.md` (what is missing).
 
-- The circuits run and produce correct verdicts on the paper's own benchmark.
-- All timings were measured **on a single 2-core host with all three parties on
-  loopback.** They are not LAN or WAN numbers. Not publishable as-is.
-- The security argument has **not been checked by anyone who knows MPC.**
-- The two observations the cost analysis rests on (`docs/claims.md`) are
-  **unverified hypotheses**, not results.
-- The circuits still use fixed point. The exact-integer path that would remove
-  the precision problem is implemented in the reference but **not yet in MPC.**
+Summary of what is now known to be false:
+
+- **Conditioning is not free.** The secret belief weight must be multiplied by
+  the secret indicator. Our own circuit does this 41,098 times, a number the
+  README previously printed beside the words "zero multiplications." The part
+  of the claim that is true — public-constant x share is local — is textbook
+  MPC (Cramer, Damgard & Maurer, EUROCRYPT 2000).
+- **The integer-exactness claim** is an elementary unbounded-arithmetic lemma,
+  is not implemented in MPC, assumes a uniform prior, has no ring-overflow
+  bound, and its p=1/2 bit-growth estimate is wrong.
+- **The specialisation argument misreads PLAS 2012**, which already states that
+  Q is public before raising the interpreter objection.
+- **The circuits are not the PLAS functionality.** They reveal the accept/reject
+  verdict publicly, which PLAS explicitly forbids; they carry no state between
+  invocations; and `belief4.mpc` conditions later rounds on the wrong hypothesis
+  table.
+
+The timings below are retained only as a record. They measure a partial,
+security-incompatible subcomputation. **Do not cite them.**
 
 ## Layout
 
@@ -87,20 +100,17 @@ Correctness pin: with secrets (63, 40, 55) the posterior is uniform over the
 0.0185185. Both the MPC and the reference agree.
 (`reference/test_reference.py::test_known_case_63_40_55`)
 
-## Why it looks cheaper than 2012 expected
+## Why we thought it was cheap — and why that was wrong
 
-Two observations, both **unverified** — see `docs/claims.md` for the arguments,
-the failure modes, and the checklist.
+Retained for the record. Both observations were refuted; see `docs/claims.md`.
 
-1. **Conditioning is communication-free.** `Q` is public and states are
-   enumerated hypotheses, so `Q(s)` is a public constant and the indicator
-   `1[Q(s)=o]` is linear in the secret output `o`. Local operation.
-2. **Indicator conditioning is exact in integers.** Keep unnormalised integer
-   weights, never renormalise, compare `b·M <= a·Z`. Zero rounding error.
+1. ~~Conditioning is communication-free.~~ False: the secret weight must be
+   multiplied by the secret indicator.
+2. ~~Indicator conditioning is exact in integers.~~ Only as an unbounded-
+   arithmetic lemma, unimplemented, with no ring bound.
 
-And the recursion objection appears not to apply: it was about *interpreting*
-arbitrary query programs, but the query is public in this threat model, so you
-specialise at compile time instead. Futamura's first projection.
+~~The recursion objection does not apply.~~ False: PLAS already assumed a public
+query before raising it.
 
 ## The real problem: fixed point
 
