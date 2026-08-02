@@ -1,0 +1,6 @@
+[fixture-inv1] query=sum_even secrets=(0, 0, 1) circuit_accept=[1, 1, 1] payload=[0, 0, 0] -> PASS
+[fixture-inv2] query=p1_is_max secrets=(0, 0, 1) circuit_accept=[1, 1, 0] payload=[0, 0, 0] -> PASS
+[extra-state] query=p1_is_max secrets=(1, 0, 2) circuit_accept=[0, 0, 0] payload=[0, 0, 0] -> PASS
+[extra-mask] query=p1_is_max secrets=(2, 0, 0) circuit_accept=[1, 0, 0] payload=[1, 0, 0] -> PASS
+============================================================
+ALL PASS

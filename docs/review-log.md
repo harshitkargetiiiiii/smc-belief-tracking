@@ -407,3 +407,18 @@ open until someone with actual MPC expertise addresses them.
   circuit_spec.masked_payload + test_reject_payload_is_fixed_and_output_independent
   pin that the reject payload is independent of o_actual.
 - **Status:** `resolved`
+
+### R-25 — Step 4 built: smallest threshold_SMC circuit + conformance harness
+
+- **Date:** 2026-08-02
+- **Source:** self (authorized by Codex round-4c gate, issue #3)
+- **Targets:** implementation
+- **Note:** Wrote `mpc/threshold_smc.mpc` within the exact authorized scope (N=3,
+  D={0,1,2}, t=1/2, 64-bit ring, one public query, secret secrets+beliefs,
+  all-outputs b*M<=a*Z, private (accept,payload), unchanged-on-reject weights).
+  External `harness.py` runs the fixture (2 invocations) + 2 extra valid states
+  and matches the oracle on verdicts, payloads, and reconstructed weights (4/4
+  PASS, `results-step4.txt`). `NOTES.md` flags the test-only reveals and the
+  missing Sigma_T persistence. No security/performance claims.
+- **Status:** `open` (functional conformance only; awaiting adversarial review
+  of private reveals, share persistence, comparison params, security argument)

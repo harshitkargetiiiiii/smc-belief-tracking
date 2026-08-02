@@ -1,22 +1,22 @@
-# STATUS (2026-08-02, round 3 correction)
+# STATUS (2026-08-02, step 4 built)
 
-Steps 1-3 REDONE after round-3 review refuted the first attempt; step 4 (MPC)
-NOT started.
+Steps 1-3 cleared review (issue #2, #3). Step 4 (smallest threshold_SMC circuit)
+BUILT and passing FUNCTIONAL conformance; security/persistence NOT done.
 
-Round-3 finding (issue #2): `tcheck` must quantify over ALL POSSIBLE outputs
-(Fig. 4 line 2), not the actual output. The first oracle checked only the actual
-output — a different, leak-prone functionality. Fixed.
+- `conformance/mpc/threshold_smc.mpc` — smallest circuit, N=3, D={0,1,2}, t=1/2,
+  64-bit ring, one public query per specialization. All-outputs check b*M<=a*Z,
+  per-recipient (accept,payload) with fixed reject mask, filtered-on-accept /
+  unchanged-on-reject weights.
+- `conformance/harness.py` — external harness; expected results live only here,
+  never enter the circuit. Runs the pinned fixture (2 invocations) + 2 extra
+  valid states; compares verdicts, payloads, reconstructed weights to the oracle.
+- `conformance/results-step4.txt` — raw output: 4/4 PASS.
+- `conformance/NOTES.md` — what is TEST-ONLY and NOT established: private reveals
+  (the build broadcasts verdicts — a §4.4 violation, present only for the test),
+  no Sigma_T share persistence (harness carries state in plaintext between
+  invocations), no security or performance claim.
 
-- Step 1: `conformance/CONTRACT.md` — corrected quantifier, Fig. 4 quoted,
-  added clauses (deterministic scope, public queries, prior consistency,
-  0<t<=1, §4.5 sharing). Citations still need a human PDF check.
-- Step 2: fixture `sum_even` then `p1_is_max`, secrets (0,0,1), t=1/2 — shows
-  divergence and reject-state-preservation. PLUS a discriminating single-shot
-  example that distinguishes all-outputs from actual-only.
-- Step 3: `conformance/oracle.py` + `test_conformance.py`, 9 hand-derived
-  assertions. The centerpiece asserts the correct and buggy decisions DIFFER, so
-  a revert to actual-only fails the suite.
-- Step 4: NOT started.
+Open for adversarial review (issue #4). NO security or performance claims.
 
 Original target spec follows.
 
