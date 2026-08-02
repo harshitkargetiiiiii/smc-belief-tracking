@@ -1,20 +1,25 @@
 """
 Unit tests for gate 2 (private delivery), no MP-SPDZ:
-- strict per-party transcript parser + the reviewer's adversarial mutations;
-- the compiled-delivery classifier distinguishes privateoutput from public open
-  (the executable negative control's core logic, on synthetic assembly).
+- strict per-party transcript parser (exact two non-empty stdout lines) + the
+  reviewer's adversarial mutations;
+- the compiled-delivery classifier distinguishes privateoutput from public open,
+  and the complete-manifest inspector rejects a separate leak tape (the core of
+  the executable negative control, on synthetic assembly);
+- the typed private-evidence validator rejects the reviewer's forged records.
 The real end-to-end run + real compiled-delivery gate execute in CI.
 """
 import pytest
 
-from private_run import strict_parse_party, evaluate_privacy, N
+from private_run import strict_parse_party, evaluate_privacy, N, CHANNEL_ASSUMPTION
 import delivery_inspect as DI
 
 
-# ---- strict per-party parser ----
+# ---- strict per-party parser (EXACT two-line stdout) ----
 
 def _own(j, acc, pay):
-    return f"noise\nPRIV {j} ACCEPT {acc}\nPRIV {j} PAYLOAD {pay}\nTime = 1"
+    # real replicated-ring-party.x stdout is exactly the two print_ln_to lines;
+    # all framework diagnostics go to stderr (verified live).
+    return f"PRIV {j} ACCEPT {acc}\nPRIV {j} PAYLOAD {pay}\n"
 
 
 def test_clean_own_stream_parses():
@@ -22,7 +27,7 @@ def test_clean_own_stream_parses():
 
 
 def test_foreign_verdict_raises():
-    txt = _own(0, 1, 1) + "\nPRIV 1 ACCEPT 0"
+    txt = _own(0, 1, 1) + "PRIV 1 ACCEPT 0"
     with pytest.raises(ValueError, match="foreign verdict"):
         strict_parse_party(txt, 0)
 
@@ -33,7 +38,7 @@ def test_duplicate_own_raises():
         strict_parse_party(txt, 0)
 
 
-def test_unrecognized_verdict_line_raises():
+def test_unrecognized_stdout_line_raises():
     # the reviewer's "explicitly tagged non-PRIV leak"
     txt = "PRIV 0 ACCEPT 1\nLEAK 1 ACCEPT 0\nPRIV 0 PAYLOAD 1"
     with pytest.raises(ValueError, match="unrecognized"):
@@ -47,13 +52,29 @@ def test_out_of_range_id_raises():
 
 
 def test_missing_own_record_raises():
-    with pytest.raises(ValueError, match="expected one ACCEPT"):
+    with pytest.raises(ValueError, match="expected exactly one ACCEPT"):
         strict_parse_party("PRIV 0 ACCEPT 1", 0)     # no PAYLOAD
 
 
 def test_empty_stream_raises():
-    with pytest.raises(ValueError, match="expected one ACCEPT"):
-        strict_parse_party("Time = 1", 0)
+    with pytest.raises(ValueError, match="expected exactly one ACCEPT"):
+        strict_parse_party("", 0)
+
+
+def test_extra_framework_line_now_rejected():
+    # blocker-2 regression: a stray line on STDOUT (framework noise or a public
+    # leak) is no longer skipped -- every non-empty stdout line must be an own
+    # PRIV record, so the exact two-line invariant catches the third line.
+    txt = "PRIV 0 ACCEPT 1\nPRIV 0 PAYLOAD 1\nTime = 1"
+    with pytest.raises(ValueError, match="unrecognized"):
+        strict_parse_party(txt, 0)
+
+
+def test_public_leak_line_rejected():
+    # a separate tape's unconditional print_ln('LEAK ...') lands as a 3rd line
+    txt = "PRIV 0 ACCEPT 0\nPRIV 0 PAYLOAD 0\nLEAK 1"
+    with pytest.raises(ValueError, match="unrecognized"):
+        strict_parse_party(txt, 0)
 
 
 def test_reviewer_exact_attack_is_rejected():
@@ -112,23 +133,46 @@ def test_delivery_signature_differs():
     assert DI.delivery_signature(PRIV_ASM) != DI.delivery_signature(LEAKY_ASM)
 
 
-# ---- private evidence validator ----
+def test_manifest_accepts_private_with_masked_subtapes():
+    man = {"0": PRIV_ASM,
+           "EQZ(3)_63-1": "vasm_open 2, True, c0, s0 # masked compare",
+           "LTZ(36)_64-3": "vasm_open 2, True, c1, s1 # masked compare"}
+    ok, reasons = DI.is_private_manifest(man)
+    assert ok and reasons == []
 
-def _phex(): return "a" * 64
+
+def test_manifest_rejects_separate_leak_tape():
+    # Codex blocker 1: clean private MAIN tape, leak hidden in a separate tape.
+    man = {"0": PRIV_ASM,
+           "EQZ(3)_63-1": "vasm_open 2, True, c0, s0 # masked compare",
+           "leak_final-1": "asm_open 3, True, c0, s0\nprint_reg_plain c0 # LEAK"}
+    ok, reasons = DI.is_private_manifest(man)
+    assert not ok
+    assert any("leak_final" in r for r in reasons)
+    # and the manifest signature changes when the leak tape is added
+    clean = {"0": PRIV_ASM, "EQZ(3)_63-1": "vasm_open 2, True, c0, s0 # masked"}
+    assert DI.manifest_signature(man) != DI.manifest_signature(clean)
 
 
-def _priv_rec(cid="p0", **kw):
+# ---- typed private evidence validator ----
+
+def _phex(c="a"):
+    return c * 64
+
+
+def _priv_rec(cid="p0", query="sum_even", **kw):
     base = dict(repo_sha="R", repo_sha_source="github_actions", bound=True,
-                mpspdz_sha="M", query="sum_even", case_id=cid, input_hash=_phex(),
+                mpspdz_sha="M", query=query, case_id=cid, input_hash=_phex(),
                 source_sha256=_phex(), delivery_sig=_phex(),
                 delivery_private_ok=True, tls_certs_present=True,
-                channel_assumption="tls", privacy_ok=True, mismatches=[],
-                error=None, final="PASS")
+                channel_assumption=CHANNEL_ASSUMPTION, privacy_ok=True,
+                mismatches=[], error=None, final="PASS")
     for j in range(3):
         base[f"party{j}_rc"] = 0
-        base[f"party{j}_stdout"] = f"PRIV {j} ACCEPT 0"
+        base[f"party{j}_stdout"] = f"PRIV {j} ACCEPT 0\nPRIV {j} PAYLOAD 0\n"
         base[f"party{j}_stderr"] = ""
-        base[f"party{j}_cmd"] = "x"
+        base[f"party{j}_cmd"] = (f"/p/replicated-ring-party.x {j} "
+                                 f"threshold_smc_private-{query} -pn 1 -h localhost -OF .")
     base.update(kw)
     return base
 
@@ -162,3 +206,69 @@ def test_private_validator_rejects_nonzero_party_rc(tmp_path):
     import validate_evidence as V
     p = _wp(tmp_path, [_priv_rec(party1_rc=1)])
     assert any("party1_rc" in e for e in V.validate_private(p, 1))
+
+
+def test_private_validator_rejects_unknown_field(tmp_path):
+    import validate_evidence as V
+    p = _wp(tmp_path, [_priv_rec(sneaky="x")])
+    assert any("unexpected field sneaky" in e for e in V.validate_private(p, 1))
+
+
+def test_private_validator_rejects_bool_rc(tmp_path):
+    # bool masquerading as an int return code
+    import validate_evidence as V
+    p = _wp(tmp_path, [_priv_rec(party0_rc=True)])
+    assert any("party0_rc wrong type (bool)" in e for e in V.validate_private(p, 1))
+
+
+def test_private_validator_rejects_forged_stdout(tmp_path):
+    import validate_evidence as V
+    p = _wp(tmp_path, [_priv_rec(party0_stdout="LEAK 5\n")])
+    assert any("party0_stdout not strict own delivery" in e
+               for e in V.validate_private(p, 1))
+
+
+def test_private_validator_rejects_public_leak_line_in_stdout(tmp_path):
+    import validate_evidence as V
+    leaked = "PRIV 0 ACCEPT 0\nPRIV 0 PAYLOAD 0\nLEAK 1\n"
+    p = _wp(tmp_path, [_priv_rec(party0_stdout=leaked)])
+    assert any("party0_stdout not strict own delivery" in e
+               for e in V.validate_private(p, 1))
+
+
+def test_private_validator_rejects_bad_cmd(tmp_path):
+    import validate_evidence as V
+    p = _wp(tmp_path, [_priv_rec(party0_cmd="x")])
+    assert any("party0_cmd not the private ring command" in e
+               for e in V.validate_private(p, 1))
+
+
+def test_private_validator_rejects_bad_channel(tmp_path):
+    import validate_evidence as V
+    p = _wp(tmp_path, [_priv_rec(channel_assumption="tls")])
+    assert any("channel_assumption" in e for e in V.validate_private(p, 1))
+
+
+def test_private_validator_rejects_forged_source_binding(tmp_path):
+    import validate_evidence as V
+    p = _wp(tmp_path, [_priv_rec(source_sha256=_phex("a"))])
+    errs = V.validate_private(p, 1, expected_source_sha256=_phex("b"),
+                              expected_delivery_sigs={"sum_even": _phex("a")})
+    assert any("source_sha256 != recomputed" in e for e in errs)
+
+
+def test_private_validator_rejects_forged_delivery_binding(tmp_path):
+    import validate_evidence as V
+    p = _wp(tmp_path, [_priv_rec(delivery_sig=_phex("a"))])
+    errs = V.validate_private(p, 1, expected_source_sha256=_phex("a"),
+                              expected_delivery_sigs={"sum_even": _phex("b")})
+    assert any("delivery_sig != recomputed" in e for e in errs)
+
+
+def test_private_validator_accepts_matching_bindings(tmp_path):
+    import validate_evidence as V
+    p = _wp(tmp_path, [_priv_rec(source_sha256=_phex("a"), delivery_sig=_phex("c"))])
+    errs = V.validate_private(p, 1, repo="R", mpspdz="M", require_bound=True,
+                              expected_source_sha256=_phex("a"),
+                              expected_delivery_sigs={"sum_even": _phex("c")})
+    assert errs == []

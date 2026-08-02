@@ -652,4 +652,40 @@ open until someone with actual MPC expertise addresses them.
   evidence (party stdout/stderr/rc/cmd, source+delivery hashes, TLS, provenance)
   validated by `validate_evidence.py --private`, --require-bound in CI, raw
   retained. (4) ADVERSARY.md corrected on all six points + channel assumption.
+- **Status:** `superseded` — re-review found two bypasses in the fix; see R-42
+
+### R-42 — Gate 2 re-review REFUTED again: two bypasses of the private-delivery fix
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, gate-2 re-review (2nd), issue #5
+- **Objection:** The a86ff1b fix had two holes. (1) **Separate-tape leak:** a
+  build whose MAIN tape is byte-identical to the private build but which adds a
+  separate `@function_tape` doing a public `reveal()` + `print_ln('LEAK ...')`
+  passed the MAIN-tape-only `delivery_inspect`, and its unconditional LEAK line
+  was silently skipped by the parser's verdict-only allowlist. (2) **Forged bound
+  record:** `validate_private` checked only flags, so a hand-authored record with
+  all flags true, valid-looking hex signatures, and rc 0 was ACCEPTED even though
+  its stdout, source, and delivery signature were tied to nothing real.
+- **Assessment:** Correct and decisive. Both reproduced locally (the subleak
+  sibling passed the old inspector; a forged record passed the old validator).
+- **Resolution (one commit):**
+  (1) `delivery_inspect.py` now inspects the COMPLETE tape manifest: main tape
+  `privateoutput` to `[0,0,1,1,2,2]` + no public open, every non-main tape an
+  allowlisted masked EQZ/LTZ subtape, and NO unconditional cleartext print
+  (`print_reg_plain`/`print_char*`) in ANY tape. The whole manifest is hashed into
+  the delivery signature. Committed `threshold_smc_subleak.mpc` reproduces the
+  separate-tape leak and is REJECTED (executable negative control, alongside
+  `threshold_smc_leaky.mpc`).
+  (2) `strict_parse_party` enforces EXACTLY two non-empty stdout lines (the own
+  ACCEPT + PAYLOAD); framework noise is on stderr, so nothing is skipped and any
+  extra / leak line fails closed.
+  (3) `validate_private` is a typed exact-schema validator: exact field set +
+  types (unknown field or bool-as-int rc rejected), re-parses each retained party
+  stdout with the strict parser, checks the ring command + channel string
+  semantically, and under `--recompute` (CI) requires each record's
+  `source_sha256` and `delivery_sig` to equal values recomputed independently from
+  the checked-out source + a fresh compile. The forged record is now rejected.
+  `ADVERSARY.md` updated (complete-manifest binding, exact two-line, recomputed
+  bindings, `tls_certs_present` caveat). Conformance suite UNCHANGED; Sigma_T NOT
+  started.
 - **Status:** `open` (awaiting gate-2 re-review)

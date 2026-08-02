@@ -184,10 +184,10 @@ jobs:
           set -o pipefail
           EVIDENCE=$PWD/conformance/_evidence/ci-private.jsonl \
             MPSPDZ=$PWD/MP-SPDZ python3 conformance/private_run.py 2>&1 | tee private-ci.log
-      - name: Validate private evidence (fail closed, SHA-bound)
+      - name: Validate private evidence (fail closed, SHA-bound, recomputed bindings)
         run: |
-          python3 conformance/validate_evidence.py conformance/_evidence/ci-private.jsonl \
-            --count 4 --private --repo "$GITHUB_SHA" --mpspdz "$MPSPDZ_PIN" --require-bound
+          MPSPDZ=$PWD/MP-SPDZ python3 conformance/validate_evidence.py conformance/_evidence/ci-private.jsonl \
+            --count 4 --private --repo "$GITHUB_SHA" --mpspdz "$MPSPDZ_PIN" --require-bound --recompute
       - name: Validate raw evidence (fail closed, SHA-bound)
         run: |
           python3 conformance/validate_evidence.py conformance/_evidence/ci-harness.jsonl \

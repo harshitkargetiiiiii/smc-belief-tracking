@@ -1,23 +1,32 @@
-# STATUS (2026-08-02, gate 2 re-review fixes: private delivery)
+# STATUS (2026-08-02, gate 2 re-review-2 fixes: private delivery)
 
-Gate 2 was REFUTED (issue #5): the stdout checker passed a public-open circuit.
-Fixed. Sigma_T persistence remains UNAUTHORIZED. Conformance suite + evidence
+Gate 2's first fix was REFUTED AGAIN (issue #5) with two bypasses; both closed in
+one commit. Sigma_T persistence remains UNAUTHORIZED. Conformance suite + evidence
 gate UNCHANGED.
 
-- Compiled-delivery inspection (`delivery_inspect.py`): the private build's main
-  tape delivers 6 verdicts via `privateoutput`; the committed leaky sibling
-  (`threshold_smc_leaky.mpc`, reveal()) `asm_open`s them and is REJECTED. The
-  executable public-open negative control a stdout oracle could not provide.
-- Strict per-party parser (`private_run.py`): exactly one own ACCEPT+PAYLOAD;
-  duplicate/foreign/unknown/missing -> fail closed. Reviewer's attacks pinned.
-- Bound raw evidence: per case, each party's raw stdout/stderr/rc/cmd, source
-  hash, delivery signature, provenance, TLS status; validated
-  `validate_evidence.py --private` (fail-closed, --require-bound in CI).
-- `ADVERSARY.md` corrected: standard ideal-functionality (no ADDITIONAL info),
-  one corruption / no collusion / encrypted channels / host isolation,
-  reveal_to vs print_ln_to separated, "no unmasked open" wording,
-  demonstrated-vs-not-claimed downgraded.
-- Tests: 64 conformance / 89 total. Functional + compiled-delivery only; NOT a
+Bypasses closed:
+
+- **Separate-tape leak** (blocker 1): the old inspector read only the MAIN tape,
+  so a build with a clean private main tape plus a separate `@function_tape` doing
+  a public `reveal()` + `print_ln('LEAK ...')` passed. Now `delivery_inspect.py`
+  inspects the COMPLETE tape manifest (main `privateoutput` to [0,0,1,1,2,2] + no
+  public open; every non-main tape an allowlisted masked EQZ/LTZ subtape; no
+  unconditional cleartext print in ANY tape) and hashes the whole manifest into
+  the delivery signature. `threshold_smc_subleak.mpc` reproduces the leak and is
+  REJECTED, alongside `threshold_smc_leaky.mpc`.
+- **Exact two-line stdout** (blocker 2): `strict_parse_party` no longer skips
+  non-verdict lines. A correct party's stdout is exactly two non-empty own PRIV
+  lines (framework noise is on stderr), so any extra/leak line fails closed.
+- **Forged bound record** (blocker 3): `validate_private` is now a typed
+  exact-schema validator — exact field set + types (unknown field / bool-as-int rc
+  rejected), re-parses each retained party stdout with the strict parser, checks
+  the ring command + channel string semantically, and under `--recompute` (CI)
+  requires each record's `source_sha256` and `delivery_sig` to equal values
+  recomputed independently from the checked-out source + a fresh compile.
+- `ADVERSARY.md` updated: complete-manifest binding, exact two-line, recomputed
+  bindings, and a `tls_certs_present` caveat (cert presence != encrypted wire).
+- Tests: 77 in `conformance/` (46 functional conformance + 31 private-gate), all
+  green; `reference/` suite unchanged. Functional + compiled-delivery only; NOT a
   simulation-security proof.
 
 Original target spec follows.

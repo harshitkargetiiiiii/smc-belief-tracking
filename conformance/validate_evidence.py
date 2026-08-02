@@ -12,6 +12,7 @@ Usage:
 """
 import argparse
 import gzip
+import hashlib
 import json
 import re
 import sys
@@ -124,32 +125,94 @@ def validate(path, count, repo=None, mpspdz=None, require_bound=False):
     return errs
 
 
-_PRIV_REQUIRED = (
-    "repo_sha", "repo_sha_source", "bound", "mpspdz_sha", "query", "case_id",
-    "input_hash", "source_sha256", "delivery_sig", "delivery_private_ok",
-    "tls_certs_present", "channel_assumption", "privacy_ok", "mismatches",
-    "error", "final",
-) + tuple(f"party{j}_{k}" for j in range(3)
-          for k in ("rc", "stdout", "stderr", "cmd"))
+# Exact typed schema for a private-delivery PASS record. Any field NOT here is
+# rejected; any field here with the wrong type is rejected. `party*_rc` uses _INT
+# (excludes bool), so a bool masquerading as a return code is caught.
+_PRIV_TYPES = {
+    "repo_sha": (str, type(None)),
+    "repo_sha_source": (str,),
+    "bound": (bool,),
+    "mpspdz_sha": (str,),
+    "query": (str,),
+    "case_id": (str,),
+    "input_hash": (str,),
+    "source_sha256": (str,),
+    "delivery_sig": (str,),
+    "delivery_private_ok": (bool,),
+    "tls_certs_present": (bool,),
+    "channel_assumption": (str,),
+    "privacy_ok": (bool,),
+    "mismatches": (list,),
+    "error": (str, type(None)),
+    "final": (str,),
+}
+for _j in range(3):
+    _PRIV_TYPES[f"party{_j}_rc"] = (_INT,)
+    _PRIV_TYPES[f"party{_j}_stdout"] = (str,)
+    _PRIV_TYPES[f"party{_j}_stderr"] = (str,)
+    _PRIV_TYPES[f"party{_j}_cmd"] = (str,)
+
+_EXPECTED_QUERIES = ("sum_even", "p1_is_max")
 
 
-def validate_private(path, count, repo=None, mpspdz=None, require_bound=False):
-    """Validate private-delivery evidence: complete records, PASS invariant,
-    private compiled delivery, TLS certs, all party rcs 0, unique case IDs."""
+def _recompute_bindings(queries):
+    """Independently recompute the expected private-source hash and per-query
+    delivery-manifest signature from the CHECKED-OUT source + a fresh compile
+    (needs MP-SPDZ). Used by --recompute in CI so a forged source_sha256 or
+    delivery_sig cannot pass. Imported lazily -> the plain validator and the
+    non-recompute path carry no MP-SPDZ dependency."""
+    import delivery_inspect as DI
+    from mpc_run import HERE
+    src = f"{HERE}/mpc/threshold_smc_private.mpc"
+    with open(src, "rb") as f:
+        exp_source = hashlib.sha256(f.read()).hexdigest()
+    exp_sigs = {}
+    for q in queries:
+        man = DI.compile_manifest("threshold_smc_private", q, f"asm_val_{q}")
+        ok, reasons = DI.is_private_manifest(man)
+        if not ok:
+            raise RuntimeError(f"recompute: private build not private for {q}: {reasons}")
+        exp_sigs[q] = DI.manifest_signature(man)
+    return exp_source, exp_sigs
+
+
+def validate_private(path, count, repo=None, mpspdz=None, require_bound=False,
+                     expected_source_sha256=None, expected_delivery_sigs=None):
+    """Typed, exact-schema validator for private-delivery evidence.
+
+    Beyond the earlier flag checks it now (a) enforces an EXACT field set + types
+    (an unknown field, or a bool where an int rc is required, is rejected);
+    (b) re-parses each party's RETAINED stdout with the strict two-line parser, so
+    a fabricated record whose stdout is not exactly that party's own ACCEPT+PAYLOAD
+    is rejected; (c) validates the ring command and channel assumption
+    semantically; and (d) when given recomputed bindings, requires every record's
+    source_sha256 / delivery_sig to equal the independently recomputed values.
+    Together these reject the forged bound record the reviewer previously slipped
+    past a flag-only check."""
+    from private_run import strict_parse_party, CHANNEL_ASSUMPTION
     errs = []
     try:
         with _open(path) as f:
             records = [json.loads(line) for line in f if line.strip()]
     except FileNotFoundError:
         return [f"missing evidence file: {path}"]
+    except (OSError, json.JSONDecodeError) as e:
+        return [f"unreadable evidence {path}: {e!r}"]
     if len(records) != count:
         errs.append(f"{path}: expected {count} records, found {len(records)}")
     seen = set()
     for i, r in enumerate(records):
         tag = f"{path}[{i}]"
-        for k in _PRIV_REQUIRED:
+        # (a) exact typed schema
+        for k, spec in _PRIV_TYPES.items():
             if k not in r:
                 errs.append(f"{tag}: missing field {k}")
+            elif not _type_ok(r[k], spec):
+                errs.append(f"{tag}: field {k} wrong type ({type(r[k]).__name__})")
+        for k in r:
+            if k not in _PRIV_TYPES:
+                errs.append(f"{tag}: unexpected field {k}")
+        # PASS invariant
         if r.get("final") != "PASS":
             errs.append(f"{tag}: final={r.get('final')!r}")
         if r.get("privacy_ok") is not True:
@@ -165,10 +228,41 @@ def validate_private(path, count, repo=None, mpspdz=None, require_bound=False):
         for j in range(3):
             if r.get(f"party{j}_rc") != 0:
                 errs.append(f"{tag}: party{j}_rc={r.get(f'party{j}_rc')}")
+        # (b) re-parse each party's retained stdout with the strict parser
+        q = r.get("query")
+        for j in range(3):
+            sj = r.get(f"party{j}_stdout")
+            if not isinstance(sj, str):
+                continue                                 # type error already logged
+            try:
+                strict_parse_party(sj, j)
+            except ValueError as e:
+                errs.append(f"{tag}: party{j}_stdout not strict own delivery: {e}")
+        # (c) semantic ring command + channel assumption
+        for j in range(3):
+            cmd = r.get(f"party{j}_cmd", "")
+            if not (isinstance(cmd, str) and re.search(
+                    rf"replicated-ring-party\.x {j} threshold_smc_private-"
+                    rf"{re.escape(str(q))}\b", cmd)):
+                errs.append(f"{tag}: party{j}_cmd not the private ring command for query {q!r}")
+        if r.get("channel_assumption") != CHANNEL_ASSUMPTION:
+            errs.append(f"{tag}: channel_assumption not the pinned encrypted-channel string")
+        # hashes are 64-hex
         for k in ("source_sha256", "delivery_sig", "input_hash"):
             v = r.get(k)
             if not (isinstance(v, str) and _HEX64.match(v)):
                 errs.append(f"{tag}: {k} not 64-hex")
+        # (d) recomputed source / delivery bindings
+        if expected_source_sha256 is not None and \
+                r.get("source_sha256") != expected_source_sha256:
+            errs.append(f"{tag}: source_sha256 != recomputed source hash")
+        if expected_delivery_sigs is not None:
+            exp = expected_delivery_sigs.get(q)
+            if exp is None:
+                errs.append(f"{tag}: no recomputed delivery_sig for query {q!r}")
+            elif r.get("delivery_sig") != exp:
+                errs.append(f"{tag}: delivery_sig != recomputed manifest signature")
+        # identity + provenance
         cid = r.get("case_id")
         if not cid or cid in seen:
             errs.append(f"{tag}: bad/duplicate case_id {cid!r}")
@@ -195,9 +289,18 @@ def main():
     ap.add_argument("--require-bound", action="store_true")
     ap.add_argument("--private", action="store_true",
                     help="validate private-delivery evidence schema")
+    ap.add_argument("--recompute", action="store_true",
+                    help="independently recompute source/delivery bindings from the "
+                         "checked-out source + a fresh compile (needs MP-SPDZ)")
     a = ap.parse_args()
-    fn = validate_private if a.private else validate
-    errs = fn(a.path, a.count, a.repo, a.mpspdz, a.require_bound)
+    if a.private:
+        kw = {}
+        if a.recompute:
+            exp_src, exp_sigs = _recompute_bindings(_EXPECTED_QUERIES)
+            kw = dict(expected_source_sha256=exp_src, expected_delivery_sigs=exp_sigs)
+        errs = validate_private(a.path, a.count, a.repo, a.mpspdz, a.require_bound, **kw)
+    else:
+        errs = validate(a.path, a.count, a.repo, a.mpspdz, a.require_bound)
     if errs:
         print(f"EVIDENCE INVALID: {a.path}")
         for e in errs[:30]:

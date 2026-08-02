@@ -15,6 +15,12 @@ invocations is the NEXT gate and is out of scope / unauthorized.
   Rep3 REQUIRES this: MP-SPDZ's own docs warn a network eavesdropper can
   otherwise reconstruct secrets. CI runs `setup-ssl.sh 3`; evidence records
   `tls_certs_present` and the channel assumption per case.
+  **Caveat (do not overread `tls_certs_present`):** that flag records only that
+  N certificate files EXIST on disk. It is NOT proof that the runtime negotiated
+  or used encryption. That the channels are in fact TLS is INFERRED from the
+  pinned backend's default (`replicated-ring-party.x` at the pinned MP-SPDZ
+  commit uses authenticated TLS sockets by default) plus the recorded launch
+  command (no flag disables it). The evidence does not packet-capture the wire.
 - **Process / host isolation.** NOTE: the test harness runs all three parties as
   one OS user on one host sharing the input directory. That is NOT an
   adversarially isolated deployment; the isolation assumption is stated, not
@@ -49,17 +55,34 @@ from those is not — and cannot be — prohibited. `payload_k = o_actual` if
 
 Demonstrated, executably:
 
-1. **Compiled delivery** (`delivery_inspect.py`): the private build's MAIN tape
-   delivers the six verdicts via `privateoutput` to players `[0,0,1,1,2,2]` and
-   has NO public open; the intentionally leaky sibling (`reveal()` +
-   `print_ln_to`) is REJECTED because its main tape `asm_open`s the verdicts. A
-   stdout oracle cannot make this distinction; this compiler-level check can.
-2. **Strict runtime** (`private_run.py`): each party's captured stdout contains
-   exactly one own `ACCEPT` and one own `PAYLOAD` under a fail-closed parser that
-   rejects duplicate / foreign-index / unknown / missing records.
-3. **Bound raw evidence**: per case, each party's raw stdout/stderr, return code,
-   command, source hash, delivery signature, provenance, and TLS status are
-   retained and validated (`validate_evidence.py --private`).
+1. **Compiled delivery over the COMPLETE tape manifest** (`delivery_inspect.py`):
+   the private build's MAIN tape delivers the six verdicts via `privateoutput` to
+   players `[0,0,1,1,2,2]` with no public open, AND every other generated tape is
+   an allowlisted masked-comparison subtape (EQZ/LTZ) — no public open and no
+   UNCONDITIONAL cleartext print (`print_reg_plain`/`print_char*`) may appear in
+   ANY tape. Two committed negative controls are REJECTED: `threshold_smc_leaky`
+   (`reveal()` opens the verdicts in the main tape) and `threshold_smc_subleak`
+   (main tape is byte-identical to the private build, but a separate
+   `@function_tape` does a public `reveal()` + `print_ln('LEAK ...')`). The
+   earlier main-tape-only inspector accepted the subleak; inspecting the whole
+   manifest, and hashing it into the delivery signature, rejects it.
+2. **Strict runtime, exact two lines** (`private_run.py`): a correct party's
+   captured STDOUT is exactly two non-empty lines — one own `ACCEPT`, one own
+   `PAYLOAD`. Framework diagnostics go to stderr, so the parser skips NOTHING:
+   every non-empty stdout line must be a well-formed own `PRIV` record and there
+   must be exactly two. A duplicate / foreign-index / unknown / missing record,
+   or ANY extra line (an unconditional public `LEAK`), fails closed.
+3. **Typed, bound, recomputed raw evidence**: per case, each party's raw
+   stdout/stderr, return code, command, source hash, delivery signature,
+   provenance, and TLS status are retained and validated
+   (`validate_evidence.py --private --recompute`). The validator enforces an EXACT
+   field set + types (an unknown field, or a bool where an int return code is
+   required, is rejected), re-parses each retained party stdout with the strict
+   two-line parser, checks the launch command and channel string semantically,
+   and — under `--recompute` in CI — requires each record's `source_sha256` and
+   `delivery_sig` to equal values recomputed independently from the checked-out
+   source and a fresh compile. A hand-forged "all-flags-true" record no longer
+   passes.
 
 NOT claimed:
 
@@ -77,8 +100,14 @@ NOT claimed:
   via `reveal()` for test-only reconstruction. The UNCHANGED functional
   conformance suite uses it as the regression gate.
 - `threshold_smc_private.mpc` — PRIVATE-DELIVERY build (this gate).
-- `threshold_smc_leaky.mpc` — INTENTIONALLY LEAKY negative control: `reveal()` +
-  `print_ln_to`. Committed so the gate can prove it rejects public opening.
+- `threshold_smc_leaky.mpc` — INTENTIONALLY LEAKY negative control #1: `reveal()`
+  opens the verdicts publicly in the MAIN tape. Committed so the gate can prove it
+  rejects public opening.
+- `threshold_smc_subleak.mpc` — INTENTIONALLY LEAKY negative control #2: the MAIN
+  tape is byte-identical to the private build, but a separate `@function_tape`
+  publicly `reveal()`s and `print_ln('LEAK ...')`s each verdict. Committed so the
+  gate can prove complete-manifest inspection rejects a leak the main-tape-only
+  check missed.
 
 ## Next gate (unauthorized until this clears)
 

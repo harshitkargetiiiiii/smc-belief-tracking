@@ -29,7 +29,6 @@ import delivery_inspect
 PORT = int(os.environ.get("PRIV_PORT", "15577"))
 _compiled = set()
 PRIV = re.compile(r"^PRIV (\d+) (ACCEPT|PAYLOAD) (-?\d+)$")
-VERDICTISH = re.compile(r"ACCEPT|PAYLOAD|PRIV")
 
 CHANNEL_ASSUMPTION = ("authenticated encrypted point-to-point (TLS via "
                       "setup-ssl); required for honest-majority Rep3")
@@ -79,27 +78,33 @@ def run_private(secrets, weight_vectors, query, port=None):
 
 def strict_parse_party(text, own_j):
     """Return {'ACCEPT': v, 'PAYLOAD': v} for party own_j's OWN stream, or raise.
-    Any verdict-like line that is not a well-formed own PRIV record -> raise
-    (foreign index, duplicate, malformed, unknown). Missing records -> raise."""
+
+    EXACT two-line enforcement (gate-2 re-review-2, blocker 2). The private build
+    emits program output ONLY via print_ln_to(own_j, ...), so a correct run's
+    STDOUT is exactly two non-empty lines: one own ACCEPT and one own PAYLOAD.
+    Every framework diagnostic ('Trying to run', 'Time =', 'Data sent', ...) goes
+    to STDERR, never stdout (verified live against replicated-ring-party.x). So we
+    do NOT skip any line by an allowlist -- the previous version's fatal weakness.
+    EVERY non-empty stdout line must be a well-formed own PRIV record, and there
+    must be exactly two of them. An unconditional public leak (e.g. a separate
+    tape's print_ln('LEAK ...')) surfaces here as a forbidden third line and is
+    rejected; a foreign / duplicate / malformed / missing record also raises."""
+    nonempty = [ln.strip() for ln in text.splitlines() if ln.strip()]
     records = {}
-    for raw in text.splitlines():
-        s = raw.strip()
-        if not s:
-            continue
-        if not VERDICTISH.search(s):
-            continue                                   # framework noise
+    for s in nonempty:
         m = PRIV.match(s)
         if not m:
-            raise ValueError(f"unrecognized verdict-like line: {s!r}")
+            raise ValueError(f"unrecognized stdout line: {s!r}")
         j, kind, val = int(m.group(1)), m.group(2), int(m.group(3))
         if j != own_j:
             raise ValueError(f"foreign verdict for party {j} in party {own_j} stream")
         if kind in records:
             raise ValueError(f"duplicate {kind} in party {own_j} stream")
         records[kind] = val
-    if set(records) != {"ACCEPT", "PAYLOAD"}:
-        raise ValueError(f"party {own_j}: expected one ACCEPT + one PAYLOAD, "
-                         f"got {sorted(records)}")
+    if len(nonempty) != 2 or set(records) != {"ACCEPT", "PAYLOAD"}:
+        raise ValueError(f"party {own_j}: expected exactly one ACCEPT + one "
+                         f"PAYLOAD stdout line, got {len(nonempty)} line(s) "
+                         f"{sorted(records)}")
     return records
 
 
@@ -180,7 +185,8 @@ def main():
         ok, d = delivery_inspect.gate(q)
         delivery_sig[q] = d["private_delivery_sig"]
         print(f"[delivery] {q}: private_ok={d['private_ok']} "
-              f"leaky_rejected={d['leaky_rejected']} -> {'PASS' if ok else 'FAIL'}")
+              f"leaky_rejected={d['leaky_rejected']} "
+              f"subleak_rejected={d['subleak_rejected']} -> {'PASS' if ok else 'FAIL'}")
         if not ok:
             print("   ", d.get("private_reasons"))
         ok_all = ok_all and ok
