@@ -74,7 +74,9 @@ for j in range(N):
     accept[j] = (viol == 0)
     payload[j] = accept[j].if_else(o_actual, 0)     # fixed mask 0 on reject
 
-# ---- updated beliefs: filter on accept, byte-for-byte unchanged on reject ----
+# ---- updated beliefs: filter on accept; on reject the VALUE is unchanged
+# (if_else = self*(a-b)+b is a secret mult; share identity/freshness NOT
+# established -- see NOTES.md) ----
 upd = [[None] * S for _ in range(N)]
 for j in range(N):
     for idx in range(S):

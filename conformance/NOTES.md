@@ -28,9 +28,10 @@ needs a protocol-level argument plus MPC-specialist review.
 ## Share persistence — NOT implemented; harness carries state in plaintext
 
 The multi-invocation fixture is run as INDEPENDENT circuit executions. Between
-inv1 and inv2 the harness advances the oracle in plaintext and re-inputs the
-resulting beliefs as fresh secret inputs to the next execution. The circuit does
-NOT round-trip `Sigma_T` as persistent secret shares across invocations.
+inv1 and inv2 the harness takes the circuit's OWN reconstructed updated weights
+from inv1 and re-inputs them as fresh secret inputs to inv2 (carried in plaintext
+by the harness). The circuit does NOT round-trip `Sigma_T` as persistent secret
+shares across invocations.
 
 Consequently the two-invocation result demonstrates per-invocation conformance,
 not genuine secret-state persistence. Implementing real `Sigma_T` share
@@ -49,10 +50,10 @@ re-sharing (share refresh) is a protocol detail for the specialist.
 
 ## Encoding assumptions
 
-- Beliefs are encoded as dense 0/1 integer weight vectors because the fixture
-  priors are uniform-over-support (the harness asserts this). Non-uniform priors
-  would need general integer weights; the circuit arithmetic supports them, but
-  they are untested here.
+- The named harness encodes beliefs as dense 0/1 weight vectors (uniform-over-
+  support). Non-uniform and per-party-scaled positive integer weights ARE tested,
+  by `coverage.py` (228 cases), and pass — so the general integer-weight path is
+  covered, not just 0/1.
 - `o_actual = Q(secrets)` is computed via a secret one-hot over the 27 states,
   then only released (masked) as `payload`. It is also revealed via the test-only
   weight/payload dump.

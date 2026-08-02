@@ -52,9 +52,9 @@ def single_cases():
                    [wvec(j, secrets[j], "tight") for j in range(N)], q, "tight")
 
 
-def run_single(secrets, wvecs, query):
-    write_inputs(secrets, wvecs)
-    acc, pay, Wl = parse_strict(run_circuit(query))
+def run_single(secrets, wvecs, query, case_id=""):
+    ih = write_inputs(secrets, wvecs)
+    acc, pay, Wl = parse_strict(run_circuit(query, case_id=case_id, input_hash=ih))
     return acc, pay, Wl
 
 
@@ -65,9 +65,9 @@ def main():
     fails = 0
 
     # single-invocation cases
-    for secrets, wvecs, query, label in single_cases():
+    for i, (secrets, wvecs, query, label) in enumerate(single_cases()):
         total += 1
-        acc, pay, Wl = run_single(secrets, wvecs, query)
+        acc, pay, Wl = run_single(secrets, wvecs, query, case_id=f"single-{i}-{label}")
         msgs = compare(secrets, wvecs, query, acc, pay, Wl)
         if msgs:
             fails += 1
@@ -77,21 +77,29 @@ def main():
 
     # carried query-pair transitions: run qA, feed the circuit's updated weights
     # as the next state, run qB; compare to the oracle carried the same way.
+    # Each transition is counted separately (round-5 re-review: two failed
+    # transitions must not report as one).
     carried = 0
     for secrets in [(0, 0, 1), (2, 0, 0), (1, 0, 2)]:
         for qA, qB in [("sum_even", "p1_is_max"), ("p1_is_max", "sum_even")]:
             wvecs = [wvec(j, secrets[j], "uniform") for j in range(N)]
-            accA, payA, WlA = run_single(secrets, wvecs, qA)
+            accA, payA, WlA = run_single(secrets, wvecs, qA, case_id=f"carriedA-{secrets}-{qA}")
             mA = compare(secrets, wvecs, qA, accA, payA, WlA)
-            # oracle carried state = circuit's updated weights (must be valid Sigma_T)
-            acc2, pay2, Wl2 = run_single(secrets, WlA, qB)
-            m2 = compare(secrets, WlA, qB, acc2, pay2, Wl2)
-            total += 2
-            carried += 2
-            if mA or m2:
+            total += 1
+            carried += 1
+            if mA:
                 fails += 1
-                print(f"FAIL [carried] secrets={secrets} {qA}->{qB}")
-                for m in mA + m2:
+                print(f"FAIL [carriedA] secrets={secrets} {qA} (stage 1 of {qA}->{qB})")
+                for m in mA:
+                    print("   ", m)
+            acc2, pay2, Wl2 = run_single(secrets, WlA, qB, case_id=f"carriedB-{secrets}-{qB}")
+            m2 = compare(secrets, WlA, qB, acc2, pay2, Wl2)
+            total += 1
+            carried += 1
+            if m2:
+                fails += 1
+                print(f"FAIL [carriedB] secrets={secrets} {qB} (stage 2 of {qA}->{qB})")
+                for m in m2:
                     print("   ", m)
 
     print("=" * 60)

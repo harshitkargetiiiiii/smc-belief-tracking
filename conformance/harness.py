@@ -27,8 +27,8 @@ def uniform_support_weights(secrets):
 
 
 def run_case(secrets, weight_vectors, query, label):
-    write_inputs(secrets, weight_vectors)
-    acc, pay, Wl = parse_strict(run_circuit(query))
+    ih = write_inputs(secrets, weight_vectors)
+    acc, pay, Wl = parse_strict(run_circuit(query, case_id=label, input_hash=ih))
     msgs = compare(secrets, weight_vectors, query, acc, pay, Wl)
     ok = not msgs
     print(f"[{label}] q={query} secrets={secrets} "

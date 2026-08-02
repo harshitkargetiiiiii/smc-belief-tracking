@@ -13,8 +13,9 @@ provenance/wording defects, now fixed.
 - `conformance/coverage.py` — 228 cases: all 27 secrets x both queries x
   {uniform, non-uniform, per-party-scaled}, near-tight bit-bound encodings, and
   carried query-pair transitions. All compared to the independent oracle.
-- `conformance/results-step4.txt`, `results-coverage.txt` — raw: 4/4 and 228/228,
-  each stamped with MP-SPDZ commit 9d809599...
+- `conformance/results-step4.txt`, `results-coverage.txt` — SUMMARIES (4/4 and
+  228/228). RAW compiler/runtime evidence: `conformance/_evidence/*.jsonl.gz`
+  (repo+MP-SPDZ SHA, input hash, return codes, compile/ring stdout+stderr).
 - CI `conformance-mpc` job pins MP-SPDZ to 9d809599..., verifies HEAD==pin,
   runs harness + coverage, retains logs.
 - `NOTES.md` — reject preserves VALUE not share identity (if_else = self*(a-b)+b);

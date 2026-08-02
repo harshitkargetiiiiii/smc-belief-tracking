@@ -418,8 +418,10 @@ open until someone with actual MPC expertise addresses them.
   all-outputs b*M<=a*Z, private (accept,payload), unchanged-on-reject weights).
   External `harness.py` runs the fixture (2 invocations) + 2 extra valid states
   and matches the oracle on verdicts, payloads, and reconstructed weights (4/4
-  PASS, `results-step4.txt`). `NOTES.md` flags the test-only reveals and the
-  missing Sigma_T persistence. No security/performance claims.
+  PASS). CORRECTION (round-5 re-review): the circuit computes recipient-indexed
+  (accept,payload) but BROADCASTS them (test-only leak) — private DELIVERY is NOT
+  implemented. `NOTES.md` flags this and the missing Sigma_T persistence. No
+  security/performance claims.
 - **Status:** `open` (functional conformance only; awaiting adversarial review
   of private reveals, share persistence, comparison params, security argument)
 
@@ -478,4 +480,47 @@ open until someone with actual MPC expertise addresses them.
 - **Resolution:** Circuit header reworded — computes recipient-indexed
   (accept,payload) but BROADCASTS (test-only leak); private delivery not
   implemented.
+- **Status:** `resolved`
+
+### R-31 — CI false-green: pipe to tee masked non-zero suite status
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round-5 re-review, issue #4
+- **Objection:** Steps ran `python ... | tee log` under `bash -e` without
+  pipefail, so the step status was tee's (0). A parser exception, mismatch, or
+  ring.sh failure could leave the job green. Reproduced: `python exit 73 | tee`
+  -> rc 0.
+- **Assessment:** Correct — the Python core was fail-closed but CI integration
+  was not.
+- **Resolution:** `set -o pipefail` on both suite steps; a dedicated pipefail
+  canary step that fails the job if non-zero does not propagate;
+  `test_mpc_run.py::test_pipefail_propagates_nonzero` pins the mechanism.
+- **Status:** `resolved`
+
+### R-32 — "Retains logs" was false; only summaries kept
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round-5 re-review, issue #4
+- **Objection:** mpc_run discarded compile stdout/stderr, ring stderr, and raw
+  ring stdout after parsing; the uploaded artifact (615 B) and results-*.txt were
+  summaries. docs/R-27 wrongly called summaries "raw".
+- **Resolution:** mpc_run writes a JSONL record per run (repo+MP-SPDZ SHA, query,
+  case id, input hash, return codes, compile+ring stdout/stderr, all retained).
+  `_evidence/*.jsonl.gz` committed; CI regenerates and uploads them. Summaries
+  relabeled as summaries in docs, R-27, NOTES.
+- **Status:** `resolved`
+
+### R-33 — Wording, missing runner tests, carried-fail counting
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round-5 re-review, issue #4
+- **Objection:** (a) .mpc still said "byte-for-byte unchanged on reject";
+  (b) NOTES said harness advances the oracle between invocations (it carries
+  circuit output); (c) NOTES said non-uniform untested (coverage tests it);
+  (d) R-25 said private output implemented; (e) mpc_run said "unexpected records
+  rejected" but ignores unknown tags; (f) no committed runner/parser tests;
+  (g) carried-pair counted two failures as one.
+- **Resolution:** (a)-(d) corrected; (e) docstring states the exact ignore
+  policy; (f) `test_mpc_run.py` (13 tests incl. the 6 reviewer attacks + fail-
+  closed + pipefail); (g) coverage counts each carried transition separately.
 - **Status:** `resolved`

@@ -1,17 +1,22 @@
 """
 Strict run/parse/compare core for the threshold_SMC conformance gate.
 
-Round-5 review (issue #4) found the previous harness unsound as a gate:
-- Scripts/ring.sh ran without checking its exit status (a forced rc=73 passed);
-- the parser pre-filled 81 zero weights and did not enforce
-  completeness/uniqueness (deleting all zero rows still "passed").
+Fail-closed (round 5): non-zero exit from compile.py or Scripts/ring.sh raises
+with stderr retained. Parser policy (round-5 re-review, be precise): lines whose
+first token is ACCEPT / PAYLOAD / W are RESULT RECORDS and are validated
+strictly (arity, range, bit-ness, non-negativity, no duplicates); ALL OTHER
+lines are treated as MP-SPDZ framework noise and IGNORED. Tampering with the
+result set still cannot pass, because completeness (all 3 ACCEPT + 3 PAYLOAD +
+81 W) and uniqueness are enforced: a deleted record -> missing -> raise; an
+injected record collides with a filled slot -> duplicate -> raise.
 
-This module fails closed: non-zero exit -> raise (with stderr); the parser
-requires exactly one ACCEPT/PAYLOAD per party and exactly one W per (party,idx),
-rejects duplicates, missing rows, out-of-range indices, malformed and unexpected
-records. Expected values are computed by the independent Fraction oracle and
-never enter the circuit.
+Raw evidence: every run appends a machine-readable JSON record (repo SHA,
+MP-SPDZ SHA, query, case id, input hash, return codes, compiler and runtime
+stdout/stderr, parsed result) to $EVIDENCE, so the retained artifact is raw, not
+a summary.
 """
+import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -22,6 +27,7 @@ from oracle import SmcBeliefTracking, REJECT
 
 MPSPDZ = os.environ.get("MPSPDZ", "/tmp/data61_MP-SPDZ")
 HERE = os.path.dirname(os.path.abspath(__file__))
+EVIDENCE = os.environ.get("EVIDENCE", "")     # path to append JSONL raw evidence
 D = [0, 1, 2]
 N = 3
 S = 27
@@ -35,47 +41,72 @@ def idx_of(s):
     return s[0] * 9 + s[1] * 3 + s[2]
 
 
-def mpspdz_sha():
-    r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=MPSPDZ,
+def _git_sha(cwd):
+    r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=cwd,
                        capture_output=True, text=True)
     return r.stdout.strip() if r.returncode == 0 else "UNKNOWN"
 
 
+def mpspdz_sha():
+    return _git_sha(MPSPDZ)
+
+
+def repo_sha():
+    return os.environ.get("GITHUB_SHA") or _git_sha(HERE)
+
+
+def _evidence(record):
+    if not EVIDENCE:
+        return
+    os.makedirs(os.path.dirname(EVIDENCE) or ".", exist_ok=True)
+    with open(EVIDENCE, "a") as f:
+        f.write(json.dumps(record) + "\n")
+
+
 def write_inputs(secrets, weight_vectors):
-    """weight_vectors: list of N dense length-27 non-negative integer vectors."""
+    """Write per-party inputs; return a deterministic hash of the exact bytes."""
     os.makedirs(f"{MPSPDZ}/Player-Data", exist_ok=True)
+    h = hashlib.sha256()
     for j in range(N):
         w = weight_vectors[j]
         assert len(w) == S and all(isinstance(x, int) and x >= 0 for x in w)
+        payload = f"{secrets[j]}\n" + "".join(f"{wv}\n" for wv in w)
         with open(f"{MPSPDZ}/Player-Data/Input-P{j}-0", "w") as f:
-            f.write(f"{secrets[j]}\n")
-            for wv in w:
-                f.write(f"{wv}\n")
+            f.write(payload)
+        h.update(payload.encode())
+    return h.hexdigest()
 
 
 _compiled = set()
 
 
-def run_circuit(query):
+def run_circuit(query, case_id="", input_hash=""):
     subprocess.run(["cp", f"{HERE}/mpc/threshold_smc.mpc",
                     f"{MPSPDZ}/Programs/Source/"], check=True)
+    crc, cout, cerr = None, "", ""
     if query not in _compiled:
         c = subprocess.run(["./compile.py", "-R", "64", "threshold_smc", query],
                            cwd=MPSPDZ, capture_output=True, text=True)
-        if c.returncode != 0:
-            raise RuntimeError(f"compile failed ({c.returncode}):\n{c.stderr}\n{c.stdout}")
-        _compiled.add(query)
+        crc, cout, cerr = c.returncode, c.stdout, c.stderr
     r = subprocess.run(["Scripts/ring.sh", f"threshold_smc-{query}"],
                        cwd=MPSPDZ, capture_output=True, text=True)
-    if r.returncode != 0:                       # FAIL CLOSED on non-zero exit
+    _evidence({
+        "repo_sha": repo_sha(), "mpspdz_sha": mpspdz_sha(),
+        "query": query, "case_id": case_id, "input_hash": input_hash,
+        "compile_rc": crc, "compile_stdout": cout, "compile_stderr": cerr,
+        "ring_rc": r.returncode, "ring_stdout": r.stdout, "ring_stderr": r.stderr,
+    })
+    if crc is not None and crc != 0:
+        raise RuntimeError(f"compile failed ({crc}):\n{cerr}\n{cout}")
+    if r.returncode != 0:                         # FAIL CLOSED
         raise RuntimeError(f"ring.sh failed ({r.returncode}):\n"
                            f"--- stderr ---\n{r.stderr}\n--- stdout ---\n{r.stdout}")
+    if query not in _compiled:
+        _compiled.add(query)
     return r.stdout
 
 
 def parse_strict(out):
-    """Require exactly one ACCEPT j, one PAYLOAD j (j in 0..N-1) and one W j idx
-    (idx in 0..S-1). Reject duplicates/missing/out-of-range/malformed/unexpected."""
     acc, pay = {}, {}
     W = {}
     for raw in out.splitlines():
@@ -84,12 +115,7 @@ def parse_strict(out):
             continue
         t = line.split()
         tag = t[0]
-        # Only ACCEPT/PAYLOAD/W are result records; everything else is MP-SPDZ
-        # framework noise and is ignored. Tampering with the result set cannot
-        # hide here: completeness (all 81 W + 3 accept/payload) and uniqueness
-        # are enforced below, so a deleted row -> missing -> raise, and an
-        # injected row collides with a filled slot -> duplicate -> raise.
-        if tag not in ("ACCEPT", "PAYLOAD", "W"):
+        if tag not in ("ACCEPT", "PAYLOAD", "W"):   # framework noise: ignore
             continue
         if tag == "ACCEPT":
             if len(t) != 3:
@@ -122,9 +148,6 @@ def parse_strict(out):
             if v < 0:
                 raise ValueError(f"negative weight: {raw!r}")
             W[(j, idx)] = v
-        else:
-            raise ValueError(f"unexpected record: {raw!r}")
-    # completeness
     for j in range(N):
         if j not in acc:
             raise ValueError(f"missing ACCEPT {j}")
@@ -137,8 +160,6 @@ def parse_strict(out):
     return acc, pay, Wl
 
 
-# ---- oracle-side expectation, decision routed through the Fraction oracle ----
-
 QUERIES = {
     "sum_even": lambda s: int(sum(s) % 2 == 0),
     "p1_is_max": lambda s: int(s[0] >= s[1] and s[0] >= s[2]),
@@ -146,8 +167,6 @@ QUERIES = {
 
 
 def beliefs_from_weights(secrets, weight_vectors):
-    """Normalized Fraction beliefs from integer weight vectors (valid Sigma_T:
-    each party's support lies within x_j = s_j)."""
     beliefs = []
     for j in range(N):
         w = weight_vectors[j]
@@ -188,7 +207,6 @@ def proportional_equal(wvec, belief):
 
 
 def compare(secrets, weight_vectors, query, acc, pay, Wl):
-    """Return list of mismatch strings ([] == pass)."""
     exp_acc, exp_pay, exp_beliefs, _ = oracle_expect(secrets, weight_vectors, query)
     msgs = []
     for j in range(N):
