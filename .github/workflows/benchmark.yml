@@ -196,5 +196,7 @@ jobs:
           path: |
             harness-ci.log
             coverage-ci.log
+            conformance/_evidence/ci-harness.jsonl
+            conformance/_evidence/ci-coverage.jsonl
             conformance/_evidence/ci-harness.jsonl.gz
             conformance/_evidence/ci-coverage.jsonl.gz

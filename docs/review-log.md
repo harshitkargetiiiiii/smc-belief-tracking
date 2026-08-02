@@ -446,7 +446,7 @@ open until someone with actual MPC expertise addresses them.
 - **Resolution:** `coverage.py` reproduces the structure as project evidence:
   228/228 across all 27 secrets, both queries, uniform/non-uniform/scaled
   weights, near-tight bit-bound (W=floor((2^63-1)/54)), and carried pairs. Run in
-  CI; raw retained in `results-coverage.txt`.
+  CI; SUMMARY only in `results-coverage.txt`; SHA-bound raw evidence is the CI artifact.
 - **Status:** `resolved`
 
 ### R-28 — MP-SPDZ provenance unpinned
@@ -567,5 +567,44 @@ open until someone with actual MPC expertise addresses them.
 
 ### R-27 (residual) — fixed
 
-- The "raw retained in results-coverage.txt" line now points to the CI
+- The "SUMMARY only in results-coverage.txt; SHA-bound raw evidence is the CI artifact" line now points to the CI
   `conformance-evidence` artifact; results-*.txt labeled summaries throughout.
+
+### R-37 — Validator certified contradictory/incomplete evidence
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round-5d, issue #4
+- **Objection:** validate_evidence accepted four bypasses: final=PASS with
+  parse_ok/comparison_ok=false; duplicate case_id; missing fields (REQUIRED was a
+  subset of EVIDENCE_FIELDS); bound=true with repo_sha_source="unbound". The
+  "good" unit test itself used two identical records + incomplete transcript,
+  pinning the bypass.
+- **Assessment:** Correct — a gate certifying bad evidence is worse than none.
+- **Resolution:** Validator now requires the FULL field set with types, enforces
+  the PASS invariant (parse_ok/comparison_ok True, mismatches==[], error null,
+  final PASS, ring_rc 0, compile_rc in {0,null}), unique non-empty case IDs,
+  64-hex input_hash, and under --require-bound both bound True AND
+  repo_sha_source=="github_actions". Regressions added for all four bypasses
+  plus bad input_hash; the "good" test now uses complete, unique records.
+- **Status:** `resolved`
+
+### R-38 — Comparison exception not retained; CI dropped failure JSONL
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round-5d, issue #4
+- **Objection:** run_and_check retained process/parse failures but a compare()
+  exception propagated with zero evidence written. The CI failure path also
+  skipped compression and uploaded only ci-*.jsonl.gz, so failure JSONL was lost.
+- **Resolution:** run_and_check resets LAST_TRANSCRIPT (no stale leak), defaults
+  all transcript fields, and writes a complete FAIL record on the comparison
+  exception path too. Test `test_run_and_check_retains_comparison_exception`
+  pins it. CI always-upload now includes uncompressed `ci-*.jsonl` as well as the
+  `.gz`, so failure records survive.
+- **Status:** `resolved`
+
+### R-27 (residual, actually fixed now)
+
+- The real line ("raw retained in results-coverage.txt") was NOT changed last
+  round despite the note; corrected now. results-*.txt are SUMMARIES throughout;
+  SHA-bound raw evidence is the CI artifact. Verified no "raw retained" strings
+  remain in docs/.

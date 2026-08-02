@@ -129,32 +129,47 @@ EVIDENCE_FIELDS = (
 
 def run_and_check(secrets, weight_vectors, query, case_id=""):
     """Run one case and FINALIZE its evidence record after strict parse + oracle
-    compare. Returns (ok, mismatches, acc, pay, Wl). Failure records are retained.
+    compare. Returns (ok, mismatches, acc, pay, Wl). A FAIL record is written and
+    retained for EVERY failure path: process, parse, AND comparison exception.
     """
+    global LAST_TRANSCRIPT
+    LAST_TRANSCRIPT = {}                       # reset: no stale transcript leak
     sha, src, bound = repo_provenance()
     ih = write_inputs(secrets, weight_vectors)
     rec = {
         "repo_sha": sha, "repo_sha_source": src, "bound": bound,
         "mpspdz_sha": mpspdz_sha(), "query": query, "case_id": case_id,
-        "input_hash": ih, "parse_ok": False, "comparison_ok": False,
+        "input_hash": ih,
+        # transcript defaults so an early failure still yields a complete record
+        "compile_rc": None, "compile_stdout": "", "compile_stderr": "",
+        "ring_rc": None, "ring_stdout": "", "ring_stderr": "",
+        "parse_ok": False, "comparison_ok": False,
         "mismatches": None, "error": None, "final": "FAIL",
     }
+
+    def _fail(exc):
+        rec.update(LAST_TRANSCRIPT)
+        rec["error"] = repr(exc)
+        rec["final"] = "FAIL"
+        _evidence(rec)
+
     try:
         out = run_circuit(query, case_id, ih)
-    except Exception as e:
-        rec.update(LAST_TRANSCRIPT)
-        rec["error"] = repr(e)
-        _evidence(rec)
+    except Exception as e:                     # process failure (compile/ring)
+        _fail(e)
         raise
     rec.update(LAST_TRANSCRIPT)
     try:
         acc, pay, Wl = parse_strict(out)
         rec["parse_ok"] = True
-    except Exception as e:
-        rec["error"] = repr(e)
-        _evidence(rec)
+    except Exception as e:                      # parse failure
+        _fail(e)
         raise
-    msgs = compare(secrets, weight_vectors, query, acc, pay, Wl)
+    try:
+        msgs = compare(secrets, weight_vectors, query, acc, pay, Wl)
+    except Exception as e:                       # comparison/oracle exception
+        _fail(e)
+        raise
     rec["comparison_ok"] = not msgs
     rec["mismatches"] = msgs
     rec["final"] = "PASS" if not msgs else "FAIL"

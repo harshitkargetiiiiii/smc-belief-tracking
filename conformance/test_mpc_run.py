@@ -183,10 +183,15 @@ def test_run_and_check_records_failure(monkeypatch, tmp_path):
 
 # ---- evidence validator ----
 
-def _rec(**kw):
+_HEX = "a" * 64
+
+
+def _rec(cid="c0", **kw):
     base = dict(repo_sha="R", repo_sha_source="github_actions", bound=True,
-                mpspdz_sha="M", query="q", case_id="c", input_hash="h",
-                ring_rc=0, ring_stdout="x", parse_ok=True, comparison_ok=True,
+                mpspdz_sha="M", query="sum_even", case_id=cid, input_hash=_HEX,
+                compile_rc=0, compile_stdout="", compile_stderr="",
+                ring_rc=0, ring_stdout="x", ring_stderr="",
+                parse_ok=True, comparison_ok=True, mismatches=[], error=None,
                 final="PASS")
     base.update(kw)
     return base
@@ -201,8 +206,45 @@ def _write(tmp_path, recs, name="e.jsonl"):
 
 def test_validator_accepts_good(tmp_path):
     import validate_evidence as V
-    p = _write(tmp_path, [_rec(), _rec()])
+    p = _write(tmp_path, [_rec("c0"), _rec("c1")])          # unique, complete
     assert V.validate(p, 2, repo="R", mpspdz="M", require_bound=True) == []
+
+
+# the four bypasses the reviewer forced through the old validator
+
+def test_validator_rejects_contradictory_pass(tmp_path):
+    import validate_evidence as V
+    p = _write(tmp_path, [_rec(final="PASS", parse_ok=False, comparison_ok=False)])
+    errs = V.validate(p, 1)
+    assert any("parse_ok" in e for e in errs)
+
+
+def test_validator_rejects_duplicate_case_id(tmp_path):
+    import validate_evidence as V
+    p = _write(tmp_path, [_rec("dup"), _rec("dup")])
+    assert any("duplicate case_id" in e for e in V.validate(p, 2))
+
+
+def test_validator_rejects_missing_fields(tmp_path):
+    import validate_evidence as V
+    r = _rec()
+    for k in ("compile_rc", "compile_stdout", "ring_stderr", "mismatches", "error"):
+        r.pop(k, None)
+    p = _write(tmp_path, [r])
+    errs = V.validate(p, 1)
+    assert any("missing field" in e for e in errs)
+
+
+def test_validator_rejects_bound_true_unbound_source(tmp_path):
+    import validate_evidence as V
+    p = _write(tmp_path, [_rec(bound=True, repo_sha_source="unbound")])
+    assert any("source=" in e for e in V.validate(p, 1, require_bound=True))
+
+
+def test_validator_rejects_bad_input_hash(tmp_path):
+    import validate_evidence as V
+    p = _write(tmp_path, [_rec(input_hash="short")])
+    assert any("input_hash" in e for e in V.validate(p, 1))
 
 
 def test_validator_rejects_wrong_count(tmp_path):
@@ -232,3 +274,28 @@ def test_validator_rejects_non_pass_final(tmp_path):
     import validate_evidence as V
     p = _write(tmp_path, [_rec(final="FAIL")])
     assert any("final=" in e for e in V.validate(p, 1))
+
+
+def test_run_and_check_retains_comparison_exception(monkeypatch, tmp_path):
+    """A comparison/oracle exception must still produce one complete FAIL record."""
+    ev = tmp_path / "e.jsonl"
+    monkeypatch.setattr(mpc_run, "EVIDENCE", str(ev))
+    monkeypatch.setattr(mpc_run, "write_inputs", lambda s, w: "a" * 64)
+    monkeypatch.setattr(mpc_run, "mpspdz_sha", lambda: "M")
+    monkeypatch.setattr(mpc_run, "repo_provenance", lambda: ("R", "github_actions", True))
+    def frc(q, case_id="", input_hash=""):
+        mpc_run.LAST_TRANSCRIPT = {
+            "compile_rc": 0, "compile_stdout": "", "compile_stderr": "",
+            "ring_rc": 0, "ring_stdout": valid_output(), "ring_stderr": "",
+        }
+        return valid_output()
+    monkeypatch.setattr(mpc_run, "run_circuit", frc)
+    def boom(*a, **k):
+        raise RuntimeError("compare boom")
+    monkeypatch.setattr(mpc_run, "compare", boom)
+    with pytest.raises(RuntimeError, match="compare boom"):
+        mpc_run.run_and_check((0, 0, 1), None, "sum_even", "cx")
+    import json
+    rec = json.loads(ev.read_text().splitlines()[0])
+    assert rec["final"] == "FAIL" and rec["parse_ok"] is True
+    assert "compare boom" in rec["error"]
