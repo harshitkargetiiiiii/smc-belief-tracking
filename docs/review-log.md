@@ -90,3 +90,85 @@ open until someone with actual MPC expertise addresses them.
 - **Resolution:** Claim 2 (exact integer conditioning) sidesteps this entirely
   for deterministic queries. Not yet implemented in the circuits.
 - **Status:** `open`
+
+---
+
+### R-05 — Claim 1 omits the secret x secret multiplication
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT, adversarial review, issue #1
+- **Targets:** claim 1
+- **Objection:** The affine indicator is not the Bayesian update. `[w'_s] =
+  [w_s] * [i_s]` is a secret-by-secret multiplication whenever the belief is
+  secret. The claim dropped `delta(s)` from its own update equation.
+- **Assessment:** **Correct, and decisive.** Verified in `belief3.mpc:33`
+  (`prior.get_vector().v * ind`). MP-SPDZ counted 41,098 multiplications — a
+  figure printed in our own README three lines below "zero multiplications."
+  Also correct that `ge = (x1 >= domv)` makes `q` secret, so the premise fails
+  in our own circuit; and that PLAS §4.5 keeps beliefs secret-shared across
+  invocations, so weights are secret from the second update onward.
+- **Resolution:** Claim 1 marked refuted in `docs/claims.md`; README rewritten.
+- **Status:** `fatal`
+
+### R-06 — The true part of claim 1 is textbook (answers R-01)
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT, issue #1
+- **Targets:** claim 1
+- **Objection:** Public-constant x share being local is foundational MPC.
+  Cited Cramer, Damgard & Maurer (EUROCRYPT 2000, eprint 2000/037), Trident
+  (NDSS 2020 §III-A(d)), and MP-SPDZ's secret/clear vs `MULS` distinction.
+- **Assessment:** Correct. This is the direct answer to R-01, and it is the
+  answer we said we least wanted: the true half is folklore, the novel half is
+  false.
+- **Resolution:** R-01 closed by this entry.
+- **Status:** `resolved`
+
+### R-07 — Claim 2 is an unbounded-arithmetic lemma, not an MPC result
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT, issue #1
+- **Targets:** claim 2
+- **Objection:** Six sub-points: not implemented in MPC; uniform prior hard-coded
+  while PLAS allows a general belief; no ring-overflow bound for Z_2^k; the
+  multi-round test repeats an idempotent operation so tests nothing; the p=1/2
+  bit-growth estimate is wrong (zero extra bits, not one); the 1/1000 overflow
+  example was backwards (`b*M` gets the factor, not `a*Z`).
+- **Assessment:** All six correct. The test point is the sharpest — our own
+  `test_repeated_revision_is_idempotent` proves the parameterized multi-round
+  test is vacuous for rounds > 1.
+- **Resolution:** Claim 2 marked refuted. R-04 superseded — exact integers were
+  our escape from probabilistic truncation and no longer available unbounded.
+- **Status:** `fatal`
+
+### R-08 — Claim 3 misreads PLAS 2012
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT, issue #1
+- **Targets:** claim 3
+- **Objection:** PLAS states Q is public in §4.3 and §4.6, then raises the
+  interpreter objection in §5. They already assumed what we thought they missed.
+  The universal-circuit reading is ours, not theirs. And specialising one query
+  does not implement `threshold_SMC(Q)` for arbitrary later queries — this repo
+  has no query language, interpreter, partial evaluator, or correctness theorem.
+- **Assessment:** Correct on all counts.
+- **Resolution:** Claim 3 marked refuted.
+- **Status:** `fatal`
+
+### R-09 — The circuits are not the PLAS functionality
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT, issue #1 §4-5
+- **Targets:** other
+- **Objection:** Publicly reveals the accept/reject verdict, which PLAS §4.4
+  explicitly forbids; no private per-recipient output; one observer/target pair
+  instead of all; no persistent `Sigma_T`; prior not preserved on rejection;
+  `belief4.mpc` builds `q` once for `Q_0` while varying the query per round;
+  unpinned MP-SPDZ; no committed raw outputs; no MPC-vs-reference comparison.
+- **Assessment:** Correct. The `belief4.mpc` bug is verified — `q` is built
+  before the loop, `o` uses `x2 + r` inside it. The 20-round timing is
+  incoherent. R-02 and R-03 are subsumed: there is no point measuring or
+  security-arguing a program that is not the functionality.
+- **Resolution:** Recorded in `docs/gap.md`. Highest-value fix identified: make
+  CI compare MPC output against the reference oracle.
+- **Status:** `open`
