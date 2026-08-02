@@ -131,3 +131,104 @@ def test_pipefail_propagates_nonzero():
         ["bash", "-c", "(exit 73) | tee /dev/null"]).returncode
     assert with_pf != 0            # gate fails closed under pipefail
     assert without_pf == 0         # the false-green the CI job must avoid
+
+
+# ---- finalized evidence record (round-5c) ----
+
+def test_run_and_check_writes_finalized_record(monkeypatch, tmp_path):
+    ev = tmp_path / "e.jsonl"
+    monkeypatch.setattr(mpc_run, "EVIDENCE", str(ev))
+    monkeypatch.setattr(mpc_run, "write_inputs", lambda s, w: "ihash")
+    monkeypatch.setattr(mpc_run, "mpspdz_sha", lambda: "MPSHA")
+    monkeypatch.setattr(mpc_run, "repo_provenance", lambda: ("REPOSHA", "github_actions", True))
+    def fake_run_circuit(query, case_id="", input_hash=""):
+        mpc_run.LAST_TRANSCRIPT = {
+            "compile_rc": 0, "compile_stdout": "c", "compile_stderr": "",
+            "ring_rc": 0, "ring_stdout": valid_output(), "ring_stderr": "",
+        }
+        return valid_output()
+    monkeypatch.setattr(mpc_run, "run_circuit", fake_run_circuit)
+    monkeypatch.setattr(mpc_run, "compare", lambda *a, **k: [])   # force comparison ok
+
+    ok, msgs, acc, pay, Wl = mpc_run.run_and_check((0, 0, 1), None, "sum_even", "c1")
+    assert ok and msgs == []
+    import json
+    rec = json.loads(ev.read_text().splitlines()[0])
+    assert rec["parse_ok"] is True and rec["comparison_ok"] is True
+    assert rec["final"] == "PASS" and rec["bound"] is True
+    assert rec["repo_sha"] == "REPOSHA" and rec["mpspdz_sha"] == "MPSHA"
+    for k in ("ring_stdout", "input_hash", "case_id", "query"):
+        assert k in rec
+
+
+def test_run_and_check_records_failure(monkeypatch, tmp_path):
+    ev = tmp_path / "e.jsonl"
+    monkeypatch.setattr(mpc_run, "EVIDENCE", str(ev))
+    monkeypatch.setattr(mpc_run, "write_inputs", lambda s, w: "ihash")
+    monkeypatch.setattr(mpc_run, "mpspdz_sha", lambda: "MPSHA")
+    monkeypatch.setattr(mpc_run, "repo_provenance", lambda: (None, "unbound", False))
+    def fake_run_circuit(query, case_id="", input_hash=""):
+        mpc_run.LAST_TRANSCRIPT = {
+            "compile_rc": 0, "compile_stdout": "", "compile_stderr": "",
+            "ring_rc": 0, "ring_stdout": "W 0 0 0", "ring_stderr": "",  # incomplete
+        }
+        return "W 0 0 0"
+    monkeypatch.setattr(mpc_run, "run_circuit", fake_run_circuit)
+    with pytest.raises(ValueError):
+        mpc_run.run_and_check((0, 0, 1), None, "sum_even", "bad")
+    import json
+    rec = json.loads(ev.read_text().splitlines()[0])
+    assert rec["final"] == "FAIL" and rec["parse_ok"] is False and rec["error"]
+
+
+# ---- evidence validator ----
+
+def _rec(**kw):
+    base = dict(repo_sha="R", repo_sha_source="github_actions", bound=True,
+                mpspdz_sha="M", query="q", case_id="c", input_hash="h",
+                ring_rc=0, ring_stdout="x", parse_ok=True, comparison_ok=True,
+                final="PASS")
+    base.update(kw)
+    return base
+
+
+def _write(tmp_path, recs, name="e.jsonl"):
+    import json
+    p = tmp_path / name
+    p.write_text("\n".join(json.dumps(r) for r in recs))
+    return str(p)
+
+
+def test_validator_accepts_good(tmp_path):
+    import validate_evidence as V
+    p = _write(tmp_path, [_rec(), _rec()])
+    assert V.validate(p, 2, repo="R", mpspdz="M", require_bound=True) == []
+
+
+def test_validator_rejects_wrong_count(tmp_path):
+    import validate_evidence as V
+    p = _write(tmp_path, [_rec()])
+    assert any("expected 2" in e for e in V.validate(p, 2))
+
+
+def test_validator_rejects_unbound_when_required(tmp_path):
+    import validate_evidence as V
+    p = _write(tmp_path, [_rec(bound=False, repo_sha=None, repo_sha_source="unbound")])
+    assert any("unbound" in e for e in V.validate(p, 1, require_bound=True))
+
+
+def test_validator_rejects_wrong_repo_sha(tmp_path):
+    import validate_evidence as V
+    p = _write(tmp_path, [_rec(repo_sha="OTHER")])
+    assert any("repo_sha" in e for e in V.validate(p, 1, repo="R"))
+
+
+def test_validator_rejects_missing_file(tmp_path):
+    import validate_evidence as V
+    assert any("missing" in e for e in V.validate(str(tmp_path / "nope.jsonl"), 1))
+
+
+def test_validator_rejects_non_pass_final(tmp_path):
+    import validate_evidence as V
+    p = _write(tmp_path, [_rec(final="FAIL")])
+    assert any("final=" in e for e in V.validate(p, 1))

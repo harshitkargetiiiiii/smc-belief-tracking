@@ -179,15 +179,22 @@ jobs:
           set -o pipefail
           EVIDENCE=$PWD/conformance/_evidence/ci-coverage.jsonl \
             MPSPDZ=$PWD/MP-SPDZ python3 conformance/coverage.py 2>&1 | tee coverage-ci.log
+      - name: Validate raw evidence (fail closed, SHA-bound)
+        run: |
+          python3 conformance/validate_evidence.py conformance/_evidence/ci-harness.jsonl \
+            --count 4   --repo "$GITHUB_SHA" --mpspdz "$MPSPDZ_PIN" --require-bound
+          python3 conformance/validate_evidence.py conformance/_evidence/ci-coverage.jsonl \
+            --count 228 --repo "$GITHUB_SHA" --mpspdz "$MPSPDZ_PIN" --require-bound
       - name: Compress raw evidence
-        if: always()
-        run: gzip -f conformance/_evidence/ci-*.jsonl || true
+        run: gzip -f conformance/_evidence/ci-harness.jsonl conformance/_evidence/ci-coverage.jsonl
       - name: Upload raw evidence + logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: conformance-evidence
+          if-no-files-found: error
           path: |
             harness-ci.log
             coverage-ci.log
-            conformance/_evidence/ci-*.jsonl.gz
+            conformance/_evidence/ci-harness.jsonl.gz
+            conformance/_evidence/ci-coverage.jsonl.gz

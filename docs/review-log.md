@@ -524,3 +524,48 @@ open until someone with actual MPC expertise addresses them.
   policy; (f) `test_mpc_run.py` (13 tests incl. the 6 reviewer attacks + fail-
   closed + pipefail); (g) coverage counts each carried transition separately.
 - **Status:** `resolved`
+
+### R-34 — Committed evidence had no repository provenance (repo_sha UNKNOWN)
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round-5c, issue #4
+- **Objection:** Every committed record said `repo_sha: "UNKNOWN"` (generated
+  outside a git repo). Claiming SHA-bound provenance for the committed files was
+  false; UNKNOWN must not satisfy the schema.
+- **Assessment:** Correct.
+- **Resolution:** `repo_provenance()` classifies source; only CI (GITHUB_SHA
+  present) is `bound: true`. Committed files relabeled `local-unbound-*.jsonl.gz`
+  (`repo_sha: null`, `bound: false`); README/docs state the authoritative
+  SHA-bound evidence is the CI artifact. CI validation requires `--require-bound`
+  and exact `repo_sha == $GITHUB_SHA`.
+- **Status:** `resolved`
+
+### R-35 — Records omitted the final parsed/comparison result
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round-5c, issue #4
+- **Objection:** `_evidence()` ran inside `run_circuit()` before parse/compare,
+  so records had no parse status, comparison status, or pass/fail; a
+  parser/oracle mismatch could not appear in the record.
+- **Resolution:** `run_and_check()` finalizes each record AFTER strict parse +
+  oracle compare with `parse_ok`, `comparison_ok`, `mismatches`, `error`,
+  `final`. Failure records retained. Tests
+  `test_run_and_check_writes_finalized_record` / `_records_failure` pin it.
+- **Status:** `resolved`
+
+### R-36 — Evidence retention could vanish without failing the job
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round-5c, issue #4
+- **Objection:** `gzip ... || true` returned 0 on a missing glob, and
+  upload-artifact lacked `if-no-files-found: error`; a future run could lose the
+  JSONL and stay green with only summaries.
+- **Resolution:** Removed `|| true`; added a fail-closed `validate_evidence.py`
+  step (exact counts 4/228, required fields, bound, exact repo+MP-SPDZ SHA) BEFORE
+  compression; upload sets `if-no-files-found: error`. Validator unit-tested (6).
+- **Status:** `resolved`
+
+### R-27 (residual) — fixed
+
+- The "raw retained in results-coverage.txt" line now points to the CI
+  `conformance-evidence` artifact; results-*.txt labeled summaries throughout.

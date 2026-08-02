@@ -13,10 +13,7 @@ Exits non-zero on any mismatch; prints the MP-SPDZ commit it tested against.
 import sys
 from itertools import product
 
-from mpc_run import (
-    D, N, S, state, run_circuit, parse_strict, compare, mpspdz_sha, write_inputs,
-    oracle_expect,
-)
+from mpc_run import D, N, S, state, run_and_check, mpspdz_sha
 
 WT = (2 ** 63 - 1) // 54          # per-weight bound so 54*W < 2^63 (near-tight)
 
@@ -52,12 +49,6 @@ def single_cases():
                    [wvec(j, secrets[j], "tight") for j in range(N)], q, "tight")
 
 
-def run_single(secrets, wvecs, query, case_id=""):
-    ih = write_inputs(secrets, wvecs)
-    acc, pay, Wl = parse_strict(run_circuit(query, case_id=case_id, input_hash=ih))
-    return acc, pay, Wl
-
-
 def main():
     sha = mpspdz_sha()
     print(f"MP-SPDZ commit under test: {sha}")
@@ -67,9 +58,9 @@ def main():
     # single-invocation cases
     for i, (secrets, wvecs, query, label) in enumerate(single_cases()):
         total += 1
-        acc, pay, Wl = run_single(secrets, wvecs, query, case_id=f"single-{i}-{label}")
-        msgs = compare(secrets, wvecs, query, acc, pay, Wl)
-        if msgs:
+        ok, msgs, _, _, _ = run_and_check(secrets, wvecs, query,
+                                          case_id=f"single-{i}-{label}")
+        if not ok:
             fails += 1
             print(f"FAIL [{label}] secrets={secrets} q={query}")
             for m in msgs:
@@ -77,26 +68,25 @@ def main():
 
     # carried query-pair transitions: run qA, feed the circuit's updated weights
     # as the next state, run qB; compare to the oracle carried the same way.
-    # Each transition is counted separately (round-5 re-review: two failed
-    # transitions must not report as one).
+    # Each transition is counted separately (two failed transitions != one).
     carried = 0
     for secrets in [(0, 0, 1), (2, 0, 0), (1, 0, 2)]:
         for qA, qB in [("sum_even", "p1_is_max"), ("p1_is_max", "sum_even")]:
             wvecs = [wvec(j, secrets[j], "uniform") for j in range(N)]
-            accA, payA, WlA = run_single(secrets, wvecs, qA, case_id=f"carriedA-{secrets}-{qA}")
-            mA = compare(secrets, wvecs, qA, accA, payA, WlA)
+            okA, mA, _, _, WlA = run_and_check(secrets, wvecs, qA,
+                                               case_id=f"carriedA-{secrets}-{qA}")
             total += 1
             carried += 1
-            if mA:
+            if not okA:
                 fails += 1
                 print(f"FAIL [carriedA] secrets={secrets} {qA} (stage 1 of {qA}->{qB})")
                 for m in mA:
                     print("   ", m)
-            acc2, pay2, Wl2 = run_single(secrets, WlA, qB, case_id=f"carriedB-{secrets}-{qB}")
-            m2 = compare(secrets, WlA, qB, acc2, pay2, Wl2)
+            ok2, m2, _, _, _ = run_and_check(secrets, WlA, qB,
+                                             case_id=f"carriedB-{secrets}-{qB}")
             total += 1
             carried += 1
-            if m2:
+            if not ok2:
                 fails += 1
                 print(f"FAIL [carriedB] secrets={secrets} {qB} (stage 2 of {qA}->{qB})")
                 for m in m2:

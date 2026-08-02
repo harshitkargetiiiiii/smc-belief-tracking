@@ -51,8 +51,18 @@ def mpspdz_sha():
     return _git_sha(MPSPDZ)
 
 
-def repo_sha():
-    return os.environ.get("GITHUB_SHA") or _git_sha(HERE)
+def repo_provenance():
+    """Return (repo_sha, source, bound). Only CI evidence (GITHUB_SHA present) is
+    'bound' — a committed local file cannot contain the hash of the commit that
+    hashes it, so local runs are explicitly unbound. UNKNOWN never counts as
+    provenance."""
+    g = os.environ.get("GITHUB_SHA")
+    if g:
+        return g, "github_actions", True
+    sha = _git_sha(HERE)
+    if sha != "UNKNOWN":
+        return sha, "git-worktree", False        # bound to a worktree, not to evidence
+    return None, "unbound", False
 
 
 def _evidence(record):
@@ -78,9 +88,14 @@ def write_inputs(secrets, weight_vectors):
 
 
 _compiled = set()
+LAST_TRANSCRIPT = {}          # set by run_circuit so run_and_check can finalize
 
 
 def run_circuit(query, case_id="", input_hash=""):
+    """Run the circuit; fail closed on non-zero compile/ring. Records the process
+    transcript in LAST_TRANSCRIPT (evidence is FINALIZED later by run_and_check,
+    after parse+compare, so the record can carry parse_ok/comparison_ok)."""
+    global LAST_TRANSCRIPT
     subprocess.run(["cp", f"{HERE}/mpc/threshold_smc.mpc",
                     f"{MPSPDZ}/Programs/Source/"], check=True)
     crc, cout, cerr = None, "", ""
@@ -90,12 +105,10 @@ def run_circuit(query, case_id="", input_hash=""):
         crc, cout, cerr = c.returncode, c.stdout, c.stderr
     r = subprocess.run(["Scripts/ring.sh", f"threshold_smc-{query}"],
                        cwd=MPSPDZ, capture_output=True, text=True)
-    _evidence({
-        "repo_sha": repo_sha(), "mpspdz_sha": mpspdz_sha(),
-        "query": query, "case_id": case_id, "input_hash": input_hash,
+    LAST_TRANSCRIPT = {
         "compile_rc": crc, "compile_stdout": cout, "compile_stderr": cerr,
         "ring_rc": r.returncode, "ring_stdout": r.stdout, "ring_stderr": r.stderr,
-    })
+    }
     if crc is not None and crc != 0:
         raise RuntimeError(f"compile failed ({crc}):\n{cerr}\n{cout}")
     if r.returncode != 0:                         # FAIL CLOSED
@@ -104,6 +117,49 @@ def run_circuit(query, case_id="", input_hash=""):
     if query not in _compiled:
         _compiled.add(query)
     return r.stdout
+
+
+EVIDENCE_FIELDS = (
+    "repo_sha", "repo_sha_source", "bound", "mpspdz_sha", "query", "case_id",
+    "input_hash", "compile_rc", "compile_stdout", "compile_stderr",
+    "ring_rc", "ring_stdout", "ring_stderr", "parse_ok", "comparison_ok",
+    "mismatches", "error", "final",
+)
+
+
+def run_and_check(secrets, weight_vectors, query, case_id=""):
+    """Run one case and FINALIZE its evidence record after strict parse + oracle
+    compare. Returns (ok, mismatches, acc, pay, Wl). Failure records are retained.
+    """
+    sha, src, bound = repo_provenance()
+    ih = write_inputs(secrets, weight_vectors)
+    rec = {
+        "repo_sha": sha, "repo_sha_source": src, "bound": bound,
+        "mpspdz_sha": mpspdz_sha(), "query": query, "case_id": case_id,
+        "input_hash": ih, "parse_ok": False, "comparison_ok": False,
+        "mismatches": None, "error": None, "final": "FAIL",
+    }
+    try:
+        out = run_circuit(query, case_id, ih)
+    except Exception as e:
+        rec.update(LAST_TRANSCRIPT)
+        rec["error"] = repr(e)
+        _evidence(rec)
+        raise
+    rec.update(LAST_TRANSCRIPT)
+    try:
+        acc, pay, Wl = parse_strict(out)
+        rec["parse_ok"] = True
+    except Exception as e:
+        rec["error"] = repr(e)
+        _evidence(rec)
+        raise
+    msgs = compare(secrets, weight_vectors, query, acc, pay, Wl)
+    rec["comparison_ok"] = not msgs
+    rec["mismatches"] = msgs
+    rec["final"] = "PASS" if not msgs else "FAIL"
+    _evidence(rec)
+    return (not msgs), msgs, acc, pay, Wl
 
 
 def parse_strict(out):

@@ -14,8 +14,10 @@ provenance/wording defects, now fixed.
   {uniform, non-uniform, per-party-scaled}, near-tight bit-bound encodings, and
   carried query-pair transitions. All compared to the independent oracle.
 - `conformance/results-step4.txt`, `results-coverage.txt` — SUMMARIES (4/4 and
-  228/228). RAW compiler/runtime evidence: `conformance/_evidence/*.jsonl.gz`
-  (repo+MP-SPDZ SHA, input hash, return codes, compile/ring stdout+stderr).
+  228/228). SHA-BOUND raw evidence is the CI `conformance-evidence` artifact
+  (validated fail-closed: exact counts, required fields, bound, exact repo+MP-SPDZ
+  SHA). Committed `_evidence/local-unbound-*.jsonl.gz` are UNBOUND local snapshots
+  (repo_sha null) with the same per-run transcript + finalized verdict.
 - CI `conformance-mpc` job pins MP-SPDZ to 9d809599..., verifies HEAD==pin,
   runs harness + coverage, retains logs.
 - `NOTES.md` — reject preserves VALUE not share identity (if_else = self*(a-b)+b);
