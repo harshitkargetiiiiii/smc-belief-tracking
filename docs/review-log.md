@@ -608,3 +608,26 @@ open until someone with actual MPC expertise addresses them.
   round despite the note; corrected now. results-*.txt are SUMMARIES throughout;
   SHA-bound raw evidence is the CI artifact. Verified no "raw retained" strings
   remain in docs/.
+
+### R-39 — Issue #4 evidence/conformance gate PASSED
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round-5e, issue #4
+- **Note:** Scoped PASS at fa403c9 — functional conformance + evidence machinery
+  certified (71/71, 4/4, 228/228, hardened validator, bound CI artifact SHA-256
+  matched). Authorized next phase: private per-recipient delivery, then Sigma_T
+  persistence, staged. Round-5 harness/provenance considered settled.
+- **Status:** `resolved`
+
+### R-40 — Staged gate 2: private per-recipient delivery (started)
+
+- **Date:** 2026-08-02
+- **Source:** self (authorized by round-5e)
+- **Note:** Added ADVERSARY.md (threat model, authorized recipients, demonstrated
+  vs not-claimed). New private build delivers (accept_j,payload_j) only to P_j via
+  reveal_to+print_ln_to; nothing broadcast; weights not output. private_run.py
+  launches 3 parties with per-player output and asserts no cross-party verdict
+  leakage; test_private.py (5) incl. negative control. Conformance suite + evidence
+  gate UNCHANGED. Sigma_T persistence NOT started. Functional demonstration only;
+  no simulation-security claim.
+- **Status:** `open` (awaiting review of the private-delivery gate)

@@ -1,30 +1,23 @@
-# STATUS (2026-08-02, step 4 hardened after round 5)
+# STATUS (2026-08-02, staged gate 2 started: private delivery)
 
-Step 4 circuit PASSES functional conformance; round-5 review confirmed the
-functional core (reviewer ran 218 cases independently) and flagged harness/
-provenance/wording defects, now fixed.
+Issue #4 (functional conformance + evidence gate) PASSED review. Now in staged
+gate 2: adversary/leakage contract + PRIVATE per-recipient delivery. Sigma_T
+persistence is the NEXT gate and is FROZEN until private delivery clears review.
 
-- `conformance/mpc/threshold_smc.mpc` — smallest circuit (two specialized query
-  tables; NOT a general Q compiler). Header no longer claims private delivery.
-- `conformance/mpc_run.py` — STRICT core: fail-closed on non-zero exit (keeps
-  stderr); parser requires exactly one ACCEPT/PAYLOAD per party and one W per
-  (party,idx), rejects duplicates/missing/out-of-range/malformed.
-- `conformance/harness.py` — 4 named cases (fixture carried inv1->inv2 + 2 extra).
-- `conformance/coverage.py` — 228 cases: all 27 secrets x both queries x
-  {uniform, non-uniform, per-party-scaled}, near-tight bit-bound encodings, and
-  carried query-pair transitions. All compared to the independent oracle.
-- `conformance/results-step4.txt`, `results-coverage.txt` — SUMMARIES (4/4 and
-  228/228). SHA-BOUND raw evidence is the CI `conformance-evidence` artifact
-  (validated fail-closed: exact counts, required fields, bound, exact repo+MP-SPDZ
-  SHA). Committed `_evidence/local-unbound-*.jsonl.gz` are UNBOUND local snapshots
-  (repo_sha null) with the same per-run transcript + finalized verdict.
-- CI `conformance-mpc` job pins MP-SPDZ to 9d809599..., verifies HEAD==pin,
-  runs harness + coverage, retains logs.
-- `NOTES.md` — reject preserves VALUE not share identity (if_else = self*(a-b)+b);
-  private delivery NOT implemented (build broadcasts, a test-only Sec 4.4 leak).
+- `conformance/ADVERSARY.md` — threat model, authorized recipients, what is
+  demonstrated (functional) vs NOT claimed (simulation security).
+- `conformance/mpc/threshold_smc_private.mpc` — private build: each
+  (accept_j, payload_j) delivered only to P_j via reveal_to(j)+print_ln_to(j);
+  nothing broadcast; weights not output.
+- `conformance/private_run.py` — launches 3 parties with per-player output,
+  captures each stdout, asserts party j learns only its own verdict and nothing
+  about others. `results-private.txt`: PRIVATE DELIVERY OK.
+- `conformance/test_private.py` — 5 unit tests incl. a negative control proving
+  the checker DETECTS a broadcast leak (passing check is not vacuous).
+- The DEBUG build `threshold_smc.mpc` and the functional conformance suite
+  (`harness.py`, `coverage.py`, evidence gate) are UNCHANGED as the regression gate.
 
-Functional conformance only. No security or performance claim. Next targets
-(NOT started): private per-recipient delivery; Sigma_T share persistence.
+Still no security or performance claim; functional demonstration only.
 
 Original target spec follows.
 

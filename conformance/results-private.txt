@@ -1,0 +1,7 @@
+MP-SPDZ commit under test: 9d809599ea6ce627216a389ca7d984fbb75d0cb9
+[private] secrets=(0, 0, 1) q=sum_even -> PASS
+[private] secrets=(0, 0, 1) q=p1_is_max -> PASS
+[private] secrets=(2, 0, 0) q=p1_is_max -> PASS
+[private] secrets=(1, 2, 0) q=sum_even -> PASS
+========================================================
+PRIVATE DELIVERY OK
