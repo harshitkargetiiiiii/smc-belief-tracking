@@ -51,16 +51,40 @@ carried in `Sigma_T` as public fixed values.)
   (`w == c * w'` for some positive rational `c`), compared per party.
 - Threshold check without division: for public `t_i = a/b` and marginal sum `M`
   over total `Z`, compare `b * M <= a * Z`.
-- Bit bound / no-wraparound: with `S = D^N` states and per-state weight `<= W`,
-  the ring modulus must exceed `max(a,b) * S * W` (and any comparison-protocol
-  internal bound). This bound MUST be stated and enforced for the chosen `N, D`.
+- **Signed no-wraparound bound.** MP-SPDZ integer comparison is SIGNED: in a
+  `2^k` ring, values `>= 2^(k-1)` are read as negative. So the requirement is
+
+      B < 2^(k-1)   where  B = max(a,b) * S * W   (S = D^N, per-state weight <= W)
+
+  NOT the earlier `2^k > B`, which is wrong (counterexample: `k=7`, `B=120`
+  passes `128 > 120` but `b*M = 70` reads as `-58`, flipping a reject into an
+  accept — see `test_circuit_spec.py::test_naive_bound_is_wrong_for_signed_comparison`).
+  `B` must bound EVERY compared operand AND every intermediate in the secret
+  evaluation of `Q`, with a compatible comparison `bit_length` and any
+  protocol-specific margin. For the fixture (`N=3, |D|=3, S=27, W=1, t=1/2`):
+  `B = 54`, so a 64-bit signed ring is vastly sufficient.
+
+## Output alphabet — public, secret-support-safe (§4.4 leakage)
+
+The circuit MUST iterate the PUBLIC compile-time alphabet `O_Q = {Q(s) : s in
+D^N}`, never the secret support. A branch impossible under the actual belief has
+`Z = 0`; with non-negative weights every `M = 0`, so `b*M <= a*Z` is `0 <= 0` =
+pass. Iterating `O_Q` therefore yields the SAME decision as iterating the secret
+support (proved in `test_circuit_spec.py::test_public_alphabet_matches_support_decision`)
+with no secret-dependent branching. Never reveal `Z`, and never branch publicly
+on whether `Z > 0`.
 
 ## Outputs
 
-- Each recipient `P_j` privately receives a `(accept_j, payload_j)` pair.
-  `payload_j` is the authorized output `o` when `accept_j`, and is masked
-  (or ignored by construction) on reject, so a rejected recipient never learns
-  the actual output.
+- Each recipient `P_j` privately receives a `(accept_j, payload_j)` pair, with
+  an ENFORCED fixed mask on reject:
+
+      payload_j = o_actual if accept_j else MASK      (MASK a fixed constant, e.g. 0)
+
+  "Ignored by construction" is insufficient — the payload the recipient receives
+  must be independent of `o_actual` on reject (pinned in
+  `test_circuit_spec.py::test_reject_payload_is_fixed_and_output_independent`).
+  Only `(accept_j, payload_j)` is revealed to `P_j`.
 - No party learns any other party's `accept_j`. A functional test cannot prove
   this; a public `reveal()` of any verdict is a gross violation that inspection
   MUST reject as a hard failure.

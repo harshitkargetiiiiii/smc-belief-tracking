@@ -366,3 +366,44 @@ open until someone with actual MPC expertise addresses them.
   proportional-weight equality, b*M<=a*Z check, the max(a,b)*S*W bit bound, and
   masked-payload private outputs.
 - **Status:** `open` (spec written; not yet exercised by a circuit)
+
+### R-22 — Signed no-wraparound bound (2^k > B is wrong; need B < 2^(k-1))
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round-4b re-review, issue #3
+- **Objection:** INTERFACE said `ring modulus > B`. MP-SPDZ comparison is signed:
+  values >= 2^(k-1) read as negative. Counterexample: k=7, B=120 passes 128>120,
+  but b*M=70 reads as -58, flipping reject into accept. Correct rule: B < 2^(k-1),
+  bounding every operand and every intermediate in the secret eval of Q.
+- **Assessment:** Correct — a real bug in the advertised bound. Verified 400
+  random b*M<=a*Z cases already agreed; the failure is purely the ring size rule.
+- **Resolution:** INTERFACE.md corrected to `B < 2^(k-1)` with bit_length/margin
+  note; fixture B=54 shown sufficient for 64-bit. circuit_spec.signed_ring_ok +
+  test_naive_bound_is_wrong_for_signed_comparison reproduce the misread.
+- **Status:** `resolved`
+
+### R-23 — Secret-support-safe zero branches (public alphabet)
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round-4b, issue #3
+- **Objection:** Enumerate the public compile-time alphabet O_Q, not the secret
+  support. Z=0 branches: non-negative weights => M=0 => b*M<=a*Z true, safe.
+  Never reveal Z>0 or branch on it publicly.
+- **Assessment:** Correct, and it is the circuit-vs-oracle iteration distinction.
+- **Resolution:** circuit_spec.tcheck_public iterates O_Q;
+  test_public_alphabet_matches_support_decision proves it equals the oracle's
+  support-based decision across the fixture and randomized cases; documented in
+  INTERFACE.md and CONTRACT.md.
+- **Status:** `resolved`
+
+### R-24 — Mandatory fixed masking on reject
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round-4b, issue #3
+- **Objection:** "masked (or ignored by construction)" is unenforceable. Require
+  payload_j = accept_j ? o_actual : MASK, reveal only (accept_j, payload_j).
+- **Assessment:** Correct.
+- **Resolution:** INTERFACE.md states the enforceable rule;
+  circuit_spec.masked_payload + test_reject_payload_is_fixed_and_output_independent
+  pin that the reject payload is independent of o_actual.
+- **Status:** `resolved`

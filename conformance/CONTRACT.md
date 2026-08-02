@@ -51,6 +51,13 @@ on the actual output makes the reject decision depend on secret data, so the
 rejection itself leaks. The decision must be *simulatable* — independent of the
 true secret — which requires quantifying over every possible output.
 
+**Oracle vs circuit iteration.** The plaintext oracle iterates the secret
+support (`possible_outputs`). A circuit cannot reveal the support, so it iterates
+the PUBLIC alphabet `O_Q = {Q(s) : s in D^N}`. These agree: an impossible branch
+has `Z = 0` hence every `M = 0` and `b*M <= a*Z` passes vacuously, so the two
+iterations give the same accept/reject (see `INTERFACE.md` and
+`test_circuit_spec.py`).
+
 ## init_SMC (Fig. 9)
 
 `delta_j := delta | (x_j = s_j)` — each party's belief is the common prior
