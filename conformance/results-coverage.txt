@@ -1,0 +1,4 @@
+MP-SPDZ commit under test: 9d809599ea6ce627216a389ca7d984fbb75d0cb9
+============================================================
+single=216  carried=12  total=228  pass=228  fail=0
+COVERAGE PASS  (228/228)  MP-SPDZ=9d809599ea6ce627216a389ca7d984fbb75d0cb9

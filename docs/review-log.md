@@ -422,3 +422,60 @@ open until someone with actual MPC expertise addresses them.
   missing Sigma_T persistence. No security/performance claims.
 - **Status:** `open` (functional conformance only; awaiting adversarial review
   of private reveals, share persistence, comparison params, security argument)
+
+### R-26 — Harness unsound as a gate (execution + parsing)
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 5, issue #4
+- **Objection:** ring.sh ran without checking exit status (forced rc=73 passed);
+  parser pre-filled 81 zeros and enforced no completeness/uniqueness (deleting
+  all zero W rows still passed; duplicates last-write-wins).
+- **Assessment:** Correct; both reproduced by the reviewer.
+- **Resolution:** `mpc_run.py` fails closed on non-zero exit (retains stderr) and
+  strictly validates records (exactly one ACCEPT/PAYLOAD per party, one W per
+  (party,idx); rejects duplicate/missing/out-of-range/malformed). Framework
+  noise ignored but tampering caught by completeness+uniqueness.
+- **Status:** `resolved`
+
+### R-27 — Add non-uniform / all-secret / property-generated coverage
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 5, issue #4 (reviewer ran 218/218)
+- **Resolution:** `coverage.py` reproduces the structure as project evidence:
+  228/228 across all 27 secrets, both queries, uniform/non-uniform/scaled
+  weights, near-tight bit-bound (W=floor((2^63-1)/54)), and carried pairs. Run in
+  CI; raw retained in `results-coverage.txt`.
+- **Status:** `resolved`
+
+### R-28 — MP-SPDZ provenance unpinned
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 5, issue #4
+- **Objection:** Cache key said v0.4.3 but a miss cloned unpinned HEAD; no SHA
+  recorded. "Reproduced in CI" had unknown backend.
+- **Resolution:** Pinned to 9d809599...; cache key includes it; CI clones+checks
+  out the pin and asserts HEAD==pin; the SHA is printed and stamped into both
+  results files. Local evidence rebuilt at the same commit.
+- **Status:** `resolved`
+
+### R-29 — False share-identity statement in NOTES
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 5, issue #4
+- **Objection:** NOTES said reject returns the ORIGINAL sharing. if_else compiles
+  to self*(a-b)+b, a secret mult that may change the sharing; only the VALUE is
+  unchanged.
+- **Resolution:** NOTES corrected: "rejected secret value is unchanged; share
+  identity/freshness has not been established."
+- **Status:** `resolved`
+
+### R-30 — Circuit must not claim private output
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 5, issue #4
+- **Objection:** Circuit computes recipient-indexed values then broadcasts them;
+  header should not say "private".
+- **Resolution:** Circuit header reworded — computes recipient-indexed
+  (accept,payload) but BROADCASTS (test-only leak); private delivery not
+  implemented.
+- **Status:** `resolved`

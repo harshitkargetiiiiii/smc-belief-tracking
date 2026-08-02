@@ -37,13 +37,15 @@ not genuine secret-state persistence. Implementing real `Sigma_T` share
 refresh/carry-over across invocations (without reconstruction) is unbuilt and is
 part of the attack surface.
 
-## Reject "unchanged weights"
+## Reject "unchanged weights" — value only, NOT share identity
 
-On reject, `upd[j][idx] = accept_j.if_else(filtered, delta[j][idx])` returns the
-ORIGINAL input sharing of `delta[j][idx]` (no re-randomization). The value is
-unchanged, which is what the oracle requires. Whether a deployment needs a fresh
-re-sharing of unchanged weights (share refresh) is a protocol detail for the
-specialist; not addressed here.
+On reject, `upd[j][idx] = accept_j.if_else(filtered, delta[j][idx])`. MP-SPDZ
+compiles arithmetic `if_else(a,b)` as `self*(a-b) + b`, a secret multiplication.
+So this establishes equality of the reconstructed **value**, not byte-for-byte
+identity of the shares — the multiplication may change the sharing even when the
+value is unchanged. **The rejected secret value is unchanged; share
+identity/freshness has not been established.** Whether a deployment needs a fresh
+re-sharing (share refresh) is a protocol detail for the specialist.
 
 ## Encoding assumptions
 

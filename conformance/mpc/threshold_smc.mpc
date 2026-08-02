@@ -1,13 +1,18 @@
 # Smallest threshold_SMC circuit (PLAS 2012 SMC belief tracking), deterministic
 # query, N=3, domain {0,1,2}, t_i=1/2, 64-bit signed ring. Specialized to ONE
-# public query given as a compile argument. Implements INTERFACE.md exactly:
+# public query given as a compile argument (currently two hard-coded query
+# tables; NOT a general public-query compiler). Implements INTERFACE.md:
 #   - public alphabet O_Q iteration, b*M <= a*Z (a=1,b=2), no division
-#   - per-recipient private (accept, payload); payload masked to 0 on reject
-#   - accepted belief filtered by actual output; rejected belief unchanged
-#   - reveals are TEST-ONLY (conformance reconstruction), flagged in NOTES.md
+#   - computes recipient-indexed (accept_j, payload_j); payload masked to 0 on
+#     reject. Private DELIVERY is NOT implemented: this build BROADCASTS every
+#     verdict/payload/weight via reveal() so the harness can reconstruct. That
+#     broadcast is a gross, TEST-ONLY leak (a Sec 4.4 violation) and must be
+#     replaced by per-recipient private output before any privacy claim.
+#   - accepted belief filtered by actual output; rejected belief value unchanged
+#     (share identity/freshness NOT established — see NOTES.md).
 #
-# No optimization, no benchmarking. Correctness is checked by harness.py against
-# the plaintext oracle.
+# No optimization, no benchmarking, no security claim. Correctness is checked by
+# harness.py / coverage.py against the independent plaintext oracle.
 
 Q = program.args[1] if len(program.args) > 1 else 'p1_is_max'
 D = [0, 1, 2]

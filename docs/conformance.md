@@ -1,22 +1,27 @@
-# STATUS (2026-08-02, step 4 built)
+# STATUS (2026-08-02, step 4 hardened after round 5)
 
-Steps 1-3 cleared review (issue #2, #3). Step 4 (smallest threshold_SMC circuit)
-BUILT and passing FUNCTIONAL conformance; security/persistence NOT done.
+Step 4 circuit PASSES functional conformance; round-5 review confirmed the
+functional core (reviewer ran 218 cases independently) and flagged harness/
+provenance/wording defects, now fixed.
 
-- `conformance/mpc/threshold_smc.mpc` — smallest circuit, N=3, D={0,1,2}, t=1/2,
-  64-bit ring, one public query per specialization. All-outputs check b*M<=a*Z,
-  per-recipient (accept,payload) with fixed reject mask, filtered-on-accept /
-  unchanged-on-reject weights.
-- `conformance/harness.py` — external harness; expected results live only here,
-  never enter the circuit. Runs the pinned fixture (2 invocations) + 2 extra
-  valid states; compares verdicts, payloads, reconstructed weights to the oracle.
-- `conformance/results-step4.txt` — raw output: 4/4 PASS.
-- `conformance/NOTES.md` — what is TEST-ONLY and NOT established: private reveals
-  (the build broadcasts verdicts — a §4.4 violation, present only for the test),
-  no Sigma_T share persistence (harness carries state in plaintext between
-  invocations), no security or performance claim.
+- `conformance/mpc/threshold_smc.mpc` — smallest circuit (two specialized query
+  tables; NOT a general Q compiler). Header no longer claims private delivery.
+- `conformance/mpc_run.py` — STRICT core: fail-closed on non-zero exit (keeps
+  stderr); parser requires exactly one ACCEPT/PAYLOAD per party and one W per
+  (party,idx), rejects duplicates/missing/out-of-range/malformed.
+- `conformance/harness.py` — 4 named cases (fixture carried inv1->inv2 + 2 extra).
+- `conformance/coverage.py` — 228 cases: all 27 secrets x both queries x
+  {uniform, non-uniform, per-party-scaled}, near-tight bit-bound encodings, and
+  carried query-pair transitions. All compared to the independent oracle.
+- `conformance/results-step4.txt`, `results-coverage.txt` — raw: 4/4 and 228/228,
+  each stamped with MP-SPDZ commit 9d809599...
+- CI `conformance-mpc` job pins MP-SPDZ to 9d809599..., verifies HEAD==pin,
+  runs harness + coverage, retains logs.
+- `NOTES.md` — reject preserves VALUE not share identity (if_else = self*(a-b)+b);
+  private delivery NOT implemented (build broadcasts, a test-only Sec 4.4 leak).
 
-Open for adversarial review (issue #4). NO security or performance claims.
+Functional conformance only. No security or performance claim. Next targets
+(NOT started): private per-recipient delivery; Sigma_T share persistence.
 
 Original target spec follows.
 
