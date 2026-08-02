@@ -309,3 +309,60 @@ open until someone with actual MPC expertise addresses them.
 - **Resolution:** Query-independence clause added to CONTRACT.md; `INTERFACE.md`
   written defining the step-4 boundary and the anti-cheating requirement.
 - **Status:** `resolved`
+
+### R-18 — Expected output vector must NEVER enter the circuit
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 4b, issue #3
+- **Objection:** INTERFACE.md said the expected output vector must enter as a
+  runtime input. That lets the circuit echo it; runtime injection is as invalid
+  as compiling it in. The expected vector is not part of Sigma_T or Figure 9.
+- **Assessment:** Correct. My anti-cheating wording defeated itself.
+- **Resolution:** INTERFACE.md rewritten — expected outputs/post-state exist
+  only in the external harness, obtained independently from the oracle, compared
+  against reconstructed results; circuit inputs are exactly public (N,D,Q,t_i)
+  and secret-shared (secrets, beliefs).
+- **Status:** `resolved`
+
+### R-19 — Thresholds are public, not optionally secret
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 4b, issue #3
+- **Objection:** INTERFACE.md allowed secret thresholds in Sigma_T. Lemma 6 has
+  each party's threshold public (so P_j can simulate its own rejection); §4.5
+  carrying them in Sigma_T keeps them fixed, not secret. Secret thresholds are a
+  different functionality with different leakage.
+- **Assessment:** Correct.
+- **Resolution:** Thresholds declared PUBLIC in INTERFACE.md and CONTRACT.md;
+  secret-threshold variant explicitly out of scope.
+- **Status:** `resolved`
+
+### R-20 — Support invariant not enforced at every boundary
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 4b, issue #3
+- **Objection:** Only the constructor rejected negative mass; `condition` and
+  `tcheck_passes` silently discarded it (reproduced: condition on
+  {(0,0):5/4,(0,1):-1/4} returned {(0,0):1}). Docstring falsely claimed "_pruned
+  enforces at every boundary." Wanted a direct negative-belief regression.
+- **Assessment:** Correct.
+- **Resolution:** Added `_positive_items` (raises on negative, skips zero); all
+  primitives (condition, possible_outputs, marginal_max, hence tcheck_passes)
+  iterate through it. Docstring corrected. Added
+  test_negative_mass_belief_raises_in_helpers.
+- **Status:** `resolved`
+
+### R-21 — Step-4 wire/state representation must be pinned before coding
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 4b, issue #3
+- **Objection:** Specify: threshold_SMC-only vs also init_SMC; fixed D^N belief
+  ordering with sparse<->dense translation; weight/threshold encoding,
+  normalization equivalence, integer bit bounds, no-wraparound; private
+  (accept,payload) output with payload masked on reject.
+- **Assessment:** Correct; these are prerequisites for a meaningful circuit.
+- **Resolution:** INTERFACE.md now specifies threshold_SMC-only on a valid
+  Sigma_T, fixed lexicographic dense ordering, unnormalized integer weights with
+  proportional-weight equality, b*M<=a*Z check, the max(a,b)*S*W bit bound, and
+  masked-payload private outputs.
+- **Status:** `open` (spec written; not yet exercised by a circuit)

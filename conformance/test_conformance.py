@@ -169,3 +169,18 @@ def test_zero_mass_prior_entry_is_pruned_not_counted():
     for b in m.beliefs:
         assert all(p > 0 for p in b.values())
     assert (1, 0) not in m.beliefs[0] and (1, 1) not in m.beliefs[0]
+
+
+def test_negative_mass_belief_raises_in_helpers():
+    """Support invariant enforced at every boundary, not just the constructor.
+    Codex round-4b counterexample: helpers must RAISE, not silently drop."""
+    bad = {(0, 0): F(5, 4), (0, 1): F(-1, 4)}
+    with pytest.raises(ValueError):
+        condition(bad, lambda s: True)
+    with pytest.raises(ValueError):
+        tcheck_passes(bad, lambda s: s[0], 1, F(1))
+    from oracle import marginal_max as mm, possible_outputs as po
+    with pytest.raises(ValueError):
+        mm(bad, 0)
+    with pytest.raises(ValueError):
+        po(bad, lambda s: s[0])

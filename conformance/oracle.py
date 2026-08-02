@@ -14,11 +14,11 @@ output o, rejecting if some protected value's posterior probability > t. The
 actual output is used only for the accepted state update (Fig. 9 line 6):
     delta_j := [[Q]]delta_j | (out = o_actual).
 
-Support invariant (added round 4): a Belief's keys are exactly its
-positive-probability support. Zero-mass keys are not "possible"; negative mass
-is rejected. `_pruned` enforces this at every boundary, and possible-output
-enumeration and conditioning both ignore non-positive mass defensively, so a
-hand-built belief carrying a zero entry is still handled correctly.
+Support invariant (round 4, tightened round 4b): every belief primitive iterates
+via `_positive_items`, which RAISES on negative mass and skips zero mass. So
+`condition`, `possible_outputs`, `marginal_max`, and `tcheck_passes` all reject
+a negative-mass belief at their boundary, not only the constructor. Zero-mass
+keys are pruned and never treated as possible outputs.
 """
 
 from __future__ import annotations
@@ -34,15 +34,19 @@ Query = Callable[[Assignment], int]        # deterministic, total
 REJECT = "reject"
 
 
-def _pruned(belief: Belief) -> Belief:
-    """Enforce the support invariant: reject negative mass, drop zero mass."""
-    out: Belief = {}
+def _positive_items(belief: Belief):
+    """Yield (state, p) for p > 0. RAISE on p < 0. This is the single boundary
+    that enforces the support invariant for every belief primitive below."""
     for s, p in belief.items():
         if p < 0:
             raise ValueError(f"negative probability at {s}: {p}")
         if p > 0:
-            out[s] = p
-    return out
+            yield s, p
+
+
+def _pruned(belief: Belief) -> Belief:
+    """Reject negative mass, drop zero mass."""
+    return dict(_positive_items(belief))
 
 
 def uniform_prior(domain: Sequence[int], n: int) -> Belief:
@@ -52,9 +56,9 @@ def uniform_prior(domain: Sequence[int], n: int) -> Belief:
 
 
 def condition(belief: Belief, keep: Callable[[Assignment], bool]) -> Belief:
-    """Bayesian conditioning. Ignores non-positive mass; renormalizes.
+    """Bayesian conditioning. Raises on negative mass, drops zero, renormalizes.
     Raises if the conditioning event has probability zero."""
-    kept = {s: p for s, p in belief.items() if p > 0 and keep(s)}
+    kept = {s: p for s, p in _positive_items(belief) if keep(s)}
     z = sum(kept.values())
     if z == 0:
         raise ValueError("conditioning on a probability-zero event")
@@ -63,14 +67,13 @@ def condition(belief: Belief, keep: Callable[[Assignment], bool]) -> Belief:
 
 def possible_outputs(belief: Belief, query: Query) -> set[int]:
     """Outputs with positive probability under the belief (support only)."""
-    return {query(s) for s, p in belief.items() if p > 0}
+    return {query(s) for s, _ in _positive_items(belief)}
 
 
 def marginal_max(belief: Belief, party: int) -> Fraction:
     acc: dict[int, Fraction] = {}
-    for s, p in belief.items():
-        if p > 0:
-            acc[s[party]] = acc.get(s[party], Fraction(0)) + p
+    for s, p in _positive_items(belief):
+        acc[s[party]] = acc.get(s[party], Fraction(0)) + p
     return max(acc.values())
 
 

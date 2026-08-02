@@ -27,6 +27,13 @@ secrets (a query chosen as a function of a secret could leak through the choice
 itself, separate from the output). "Public" alone does not imply this;
 secret-independent choice is required.
 
+**Thresholds are PUBLIC.** Lemma 6: for `i != j`, `t_i` is publicly known so
+`P_j` can simulate whether it will be rejected. §4.5 carries thresholds in
+`Sigma_T` to keep them fixed across invocations; that does not make them secret.
+A secret-threshold variant is a *different* functionality (receiving `reject`
+could reveal others' thresholds; the Lemma-6 simulation argument fails) and is
+out of scope.
+
 Support invariant: a belief's states are its positive-probability support;
 zero-mass states are not "possible outputs" and negative mass is illegal.
 
