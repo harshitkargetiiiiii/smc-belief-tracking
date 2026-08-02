@@ -81,6 +81,20 @@ jobs:
       - name: Stage circuits
         run: cp mpc/*.mpc MP-SPDZ/Programs/Source/
 
+      - name: Write party inputs
+        # The circuits read one secret per party via sint.get_input_from(i),
+        # which MP-SPDZ expects to find in Player-Data/Input-P<i>-0.
+        # Secrets (63, 40, 55) are the pinned correctness case: party 0 is the
+        # richest, so the posterior is uniform over the 54x54 states with
+        # s2,s3 <= 63 and the max marginal is exactly 1/54 = 0.0185185.
+        # Cross-check: reference/test_reference.py::test_known_case_63_40_55
+        working-directory: MP-SPDZ
+        run: |
+          mkdir -p Player-Data
+          echo 63 > Player-Data/Input-P0-0
+          echo 40 > Player-Data/Input-P1-0
+          echo 55 > Player-Data/Input-P2-0
+
       - name: Apply network conditions
         if: matrix.network.delay != '0ms'
         run: |
