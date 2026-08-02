@@ -1,32 +1,24 @@
 """
 Independent plaintext oracle for PLAS 2012 "SMC belief tracking".
 
-Scope: DETERMINISTIC, total, public queries that add only `out`. This is a
-faithful model of the PLAS ideal functionality *restricted to that query class*.
-PLAS also permits probabilistic queries, which require likelihood weighting
-under the paper's probabilistic semantics, NOT the Boolean support-filter used
-here. Those are out of scope and this oracle must not be called faithful for
-them. (Round-3 review, issue #2.)
+Scope: DETERMINISTIC, total, public queries adding only `out`. Faithful to the
+PLAS ideal functionality restricted to that query class. Probabilistic queries
+need likelihood weighting, not a Boolean support-filter, and are out of scope.
 
 Written from the paper, independent of reference/ and of any circuit.
 Source: Mardziel, Hicks, Katz & Srivatsa, PLAS 2012.
 https://www.cs.umd.edu/~mwh/papers/belief-smc.pdf
 
-CORRECTED after round 3. The decisive fix: `tcheck` (Figure 4) quantifies over
-ALL POSSIBLE outputs, not the actual one. Figure 4 verbatim:
+Key semantics (Figure 4): tcheck runs [[q]]delta_i, then checks EVERY possible
+output o, rejecting if some protected value's posterior probability > t. The
+actual output is used only for the accepted state update (Fig. 9 line 6):
+    delta_j := [[Q]]delta_j | (out = o_actual).
 
-    tcheck(q, delta_i, t_j, x_j):
-      1  delta_i := [[q]] delta_i
-      2  forall possible outputs o
-      3    d_hat := (delta_i | (out = o)) restricted to {x_j}
-      4    if exists n. d_hat({x_j = n}) > t_j then
-      5      return reject
-      6  return accept
-
-Checking only the actual output makes the reject decision depend on secret data,
-which lets the rejection itself leak (Section 3.2, "Avoiding leakage due to query
-rejection"; the decision must be simulatable). The actual output is used ONLY for
-the state update, and ONLY after all checks pass (Fig. 9 line 6).
+Support invariant (added round 4): a Belief's keys are exactly its
+positive-probability support. Zero-mass keys are not "possible"; negative mass
+is rejected. `_pruned` enforces this at every boundary, and possible-output
+enumeration and conditioning both ignore non-positive mass defensively, so a
+hand-built belief carrying a zero entry is still handled correctly.
 """
 
 from __future__ import annotations
@@ -42,6 +34,17 @@ Query = Callable[[Assignment], int]        # deterministic, total
 REJECT = "reject"
 
 
+def _pruned(belief: Belief) -> Belief:
+    """Enforce the support invariant: reject negative mass, drop zero mass."""
+    out: Belief = {}
+    for s, p in belief.items():
+        if p < 0:
+            raise ValueError(f"negative probability at {s}: {p}")
+        if p > 0:
+            out[s] = p
+    return out
+
+
 def uniform_prior(domain: Sequence[int], n: int) -> Belief:
     states = list(product(domain, repeat=n))
     p = Fraction(1, len(states))
@@ -49,28 +52,34 @@ def uniform_prior(domain: Sequence[int], n: int) -> Belief:
 
 
 def condition(belief: Belief, keep: Callable[[Assignment], bool]) -> Belief:
-    kept = {s: p for s, p in belief.items() if keep(s)}
+    """Bayesian conditioning. Ignores non-positive mass; renormalizes.
+    Raises if the conditioning event has probability zero."""
+    kept = {s: p for s, p in belief.items() if p > 0 and keep(s)}
     z = sum(kept.values())
     if z == 0:
         raise ValueError("conditioning on a probability-zero event")
     return {s: p / z for s, p in kept.items()}
 
 
+def possible_outputs(belief: Belief, query: Query) -> set[int]:
+    """Outputs with positive probability under the belief (support only)."""
+    return {query(s) for s, p in belief.items() if p > 0}
+
+
 def marginal_max(belief: Belief, party: int) -> Fraction:
     acc: dict[int, Fraction] = {}
     for s, p in belief.items():
-        acc[s[party]] = acc.get(s[party], Fraction(0)) + p
+        if p > 0:
+            acc[s[party]] = acc.get(s[party], Fraction(0)) + p
     return max(acc.values())
 
 
 def tcheck_passes(dj: Belief, query: Query, i: int, t_i: Fraction) -> bool:
-    """Figure 4, for protected party i, from recipient belief dj.
-    Accept iff EVERY possible output leaves i's marginal <= t_i.
-    """
-    possible_outputs = {query(s) for s in dj}          # support of [[q]]dj
-    for o in possible_outputs:
+    """Figure 4, protected party i, from recipient belief dj.
+    Accept iff EVERY possible output leaves i's marginal <= t_i."""
+    for o in possible_outputs(dj, query):
         revised = condition(dj, lambda s, oo=o: query(s) == oo)
-        if marginal_max(revised, i) > t_i:             # strict '>' rejects; '<=' ok
+        if marginal_max(revised, i) > t_i:          # strict '>' rejects; '==' ok
             return False
     return True
 
@@ -82,10 +91,11 @@ class SmcBeliefTracking:
         self.secrets: Assignment = tuple(secrets)
         self.thresholds = list(thresholds)
         for t in self.thresholds:
-            if not (Fraction(0) < t <= Fraction(1)):   # 0 < t_i <= 1
+            if not (Fraction(0) < t <= Fraction(1)):     # 0 < t_i <= 1
                 raise ValueError(f"threshold out of (0,1]: {t}")
-        prior = prior or uniform_prior(self.domain, self.n)
-        if abs(sum(prior.values()) - 1) != 0:
+        prior = _pruned(prior if prior is not None
+                        else uniform_prior(self.domain, self.n))
+        if sum(prior.values()) != 1:
             raise ValueError("prior must sum to 1")
         if prior.get(self.secrets, Fraction(0)) == 0:
             raise ValueError("prior must be consistent with the actual secrets")
@@ -108,9 +118,10 @@ class SmcBeliefTracking:
             )
             if accept:
                 visible.append(o_actual)
+                # Fig. 9 line 6: delta_j := [[Q]]delta_j | (out = o_actual)
                 new_beliefs[j] = condition(dj, lambda s: query(s) == o_actual)
             else:
-                visible.append(REJECT)          # belief unchanged (Sec 4.4)
+                visible.append(REJECT)              # belief unchanged (Sec 4.4)
         self.beliefs = new_beliefs
         return visible
 

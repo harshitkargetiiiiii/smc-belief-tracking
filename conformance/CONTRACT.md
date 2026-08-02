@@ -22,6 +22,14 @@ assign to any single value of `i`'s secret, with `0 < t_i <= 1`. Reject when a
 value's probability is *strictly greater* than the threshold — so acceptance
 uses `<= t_i` (equality allowed).
 
+**Query assumption.** Queries are public AND their choice is independent of the
+secrets (a query chosen as a function of a secret could leak through the choice
+itself, separate from the output). "Public" alone does not imply this;
+secret-independent choice is required.
+
+Support invariant: a belief's states are its positive-probability support;
+zero-mass states are not "possible outputs" and negative mass is illegal.
+
 ## tcheck — ALL possible outputs (Fig. 4, verbatim)
 
     tcheck(q, delta_i, t_j, x_j):
@@ -49,9 +57,12 @@ For each recipient `P_j`:
 1. Predicted output distribution `[[Q]]delta_j`; possible outputs = its support.
 2. For every other party `i != j`, run tcheck over ALL those outputs (above).
 3. Accept `P_j` iff every tcheck passes.
-4. On accept: `P_j` sees the ACTUAL output `o`; `delta_j := delta_j | (out = o)`
-   (Fig. 9 line 6 — actual output used ONLY here, ONLY after checks pass).
-   On reject: `P_j` sees reject; `delta_j` unchanged (§4.4, Lemma 6).
+4. On accept: `P_j` sees the ACTUAL output `o`;
+   `delta_j := [[Q]]delta_j | (out = o)` (Fig. 9 line 6 — the query is evaluated
+   into the belief, then conditioned on the actual output; used ONLY here, ONLY
+   after checks pass). For deterministic total queries this equals filtering
+   `delta_j`'s support by `Q(s) = o` and renormalizing, which is what the oracle
+   does. On reject: `P_j` sees reject; `delta_j` unchanged (§4.4, Lemma 6).
 
 ## Privacy (§4.4) — a requirement, NOT established by functional tests
 

@@ -45,13 +45,18 @@ def test_discriminating_case():
     assert marginal_max(actual, 1) == F(3, 8)
     assert marginal_max(actual, 1) <= HALF          # actual-only would accept
 
-    # alternate output branch: unsafe
+    assert marginal_max(actual, 2) == F(3, 8)       # symmetric in x2
+    assert marginal_max(actual, 2) <= HALF
+
+    # alternate output branch: unsafe, symmetrically in x1 and x2
     alt = condition(d0, lambda s: Q_P1_IS_MAX(s) == 1)
     assert alt == {(0, 0, 0): F(1)}
     assert marginal_max(alt, 1) == F(1)             # > 1/2
+    assert marginal_max(alt, 2) == F(1)             # > 1/2
 
-    # correct semantics rejects; the two decisions differ
+    # correct semantics rejects on either protected party; the two decisions differ
     assert tcheck_passes(d0, Q_P1_IS_MAX, 1, HALF) is False
+    assert tcheck_passes(d0, Q_P1_IS_MAX, 2, HALF) is False
 
     visible = m.invoke(Q_P1_IS_MAX)
     assert visible[0] == REJECT                     # recipient 0 rejects
@@ -135,3 +140,32 @@ def test_threshold_out_of_range_raises():
         SmcBeliefTracking([0, 1], (0, 0), [F(0), HALF])
     with pytest.raises(ValueError):
         SmcBeliefTracking([0, 1], (0, 0), [F(3, 2), HALF])
+
+
+# ---- round-4 blockers: zero-mass and negative-mass support -------------
+
+def test_zero_mass_key_is_not_a_possible_output():
+    """Codex counterexample: a zero-mass key must not invent a possible output,
+    and must not cause a conditioning error. support([[q]]b) = {0}, accept at
+    equality t=1."""
+    from oracle import possible_outputs
+    b = {(0, 0): F(1), (1, 0): F(0)}
+    q = lambda s: s[0]
+    assert possible_outputs(b, q) == {0}
+    assert tcheck_passes(b, q, 1, F(1)) is True
+
+
+def test_negative_mass_prior_raises():
+    with pytest.raises(ValueError):
+        SmcBeliefTracking([0, 1], (0, 0), [HALF, HALF],
+                          {(0, 0): F(5, 4), (0, 1): F(-1, 4)})
+
+
+def test_zero_mass_prior_entry_is_pruned_not_counted():
+    # a prior carrying an explicit zero entry is accepted (pruned), and the zero
+    # state is not part of any belief's support.
+    prior = {(0, 0): F(1, 2), (0, 1): F(1, 2), (1, 0): F(0), (1, 1): F(0)}
+    m = SmcBeliefTracking([0, 1], (0, 0), [HALF, HALF], prior)
+    for b in m.beliefs:
+        assert all(p > 0 for p in b.values())
+    assert (1, 0) not in m.beliefs[0] and (1, 1) not in m.beliefs[0]

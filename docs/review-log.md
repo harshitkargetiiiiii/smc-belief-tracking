@@ -266,3 +266,46 @@ open until someone with actual MPC expertise addresses them.
 
 - Steps 1-3 redone under the corrected semantics and re-submitted for review
   (issue #3). Step 4 still not started. Still `in_progress`.
+
+### R-15 — Support invariant: zero-mass keys and negative mass
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 4, issue #3
+- **Objection:** `possible_outputs = {query(s) for s in dj}` treated every dict
+  key as support. A zero-mass key invents a non-possible output and then raises
+  on conditioning. Constructor also accepted negative mass. Counterexample:
+  `b={(0,0):1,(1,0):0}`, `q=s[0]` — support is {0}, should accept at t=1, but
+  code invented output 1 and crashed.
+- **Assessment:** Correct. Verified the counterexample.
+- **Resolution:** `_pruned` enforces the invariant (reject negative, drop zero);
+  `condition`, `possible_outputs`, `marginal_max` all filter `p>0` defensively.
+  Regressions added: zero-mass-not-a-possible-output, negative-mass-raises,
+  zero-mass-prior-entry-pruned.
+- **Status:** `resolved`
+
+### R-16 — Accepted-update formula omitted query evaluation
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 4, issue #3
+- **Objection:** CONTRACT said `delta_j := delta_j | (out=o)`, which is
+  ill-typed (pre-query belief has no `out`). Figure 9 line 6 is
+  `delta_j := [[Q]]delta_j | (out=o)`. Python is equivalent only because queries
+  are deterministic and total.
+- **Assessment:** Correct.
+- **Resolution:** CONTRACT.md fixed with the paper's formula and the
+  deterministic-equivalence note.
+- **Status:** `resolved`
+
+### R-17 — Missing clauses: query-choice independence, step-4 interface
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 4, issue #3
+- **Objection:** "Public query" does not imply the query CHOICE is
+  secret-independent — add that assumption. And define the step-4 interface
+  before coding: compile-time public (domain, query) vs runtime secret-shared
+  (Sigma_T), private per-recipient outputs, returned shares; forbid compiling in
+  secrets/expected vector; require a varying-secret test so constants can't pass.
+- **Assessment:** Correct.
+- **Resolution:** Query-independence clause added to CONTRACT.md; `INTERFACE.md`
+  written defining the step-4 boundary and the anti-cheating requirement.
+- **Status:** `resolved`
