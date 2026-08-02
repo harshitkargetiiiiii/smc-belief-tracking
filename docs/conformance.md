@@ -1,3 +1,23 @@
+# STATUS (2026-08-02)
+
+Steps 1-3 DONE and under review; step 4 (MPC circuit) NOT started.
+
+- Step 1 (contract transcription): `conformance/CONTRACT.md` — cited, but
+  citations need a human check against the PDF.
+- Step 2 (fixture): 3 parties, domain {0,1,2}, secrets (0,0,1), thresholds 1/2,
+  two invocations. Exercises accept-then-reject state preservation AND
+  per-recipient divergence. Hand-derived in `conformance/CONTRACT.md`.
+- Step 3 (independent oracle): `conformance/oracle.py` + `test_conformance.py`,
+  7 hand-derived assertions passing. Written fresh from the contract, not from
+  the circuits or `reference/`.
+- Step 4 (smallest MPC circuit matching the fixture): NOT started. This is where
+  the real difficulty is (private per-recipient output, persistent secret state).
+  A functional match will NOT establish the reject-unobservability property.
+
+Original target spec follows.
+
+---
+
 # Conformance target
 
 The gate any future attempt must pass **before** any performance work.

@@ -206,9 +206,11 @@ open until someone with actual MPC expertise addresses them.
 - **Assessment:** Correct, and it invalidates the move I proposed. My oracle is
   single-observer, stateless, with no rejection semantics. Comparing against it
   would have produced a green check for the wrong thing.
-- **Resolution:** `docs/conformance.md` written as the gate. Not implemented —
-  awaiting a decision on whether to run it as a diagnostic exercise.
-- **Status:** `open`
+- **Resolution:** Steps 1-3 done — contract transcribed (`conformance/CONTRACT.md`),
+  fixture with accept-then-reject and divergence, independent oracle with 7
+  hand-derived passing assertions. Step 4 (MPC circuit) not started. Up for
+  review before any circuit is written.
+- **Status:** `in_progress`
 
 ### R-12 — README internally inconsistent after partial edit
 

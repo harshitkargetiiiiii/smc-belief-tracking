@@ -26,6 +26,9 @@ jobs:
       - name: Reference test suite
         run: python3 -m pytest reference/ -v
 
+      - name: Conformance oracle + fixture
+        run: python3 -m pytest conformance/ -v
+
   # ---------------------------------------------------------------------
   # Slow: build MP-SPDZ and run the circuit.
   # ---------------------------------------------------------------------
