@@ -1,4 +1,4 @@
-name: benchmark
+name: checks
 
 # Runs the correctness tests on every push, and the full MPC benchmark sweep on
 # demand or weekly. The MPC job builds MP-SPDZ from source (~8 min cold, cached
@@ -8,16 +8,7 @@ on:
   push:
     branches: [main]
   pull_request:
-  workflow_dispatch:
-    inputs:
-      domain:
-        description: "Domain size (91 = the PLAS 2012 benchmark)"
-        default: "91"
-      rounds:
-        description: "Sequential revision rounds"
-        default: "1"
-  schedule:
-    - cron: "0 6 * * 1"          # Mondays 06:00 UTC
+  workflow_dispatch:        # manual only - see the gate below
 
 jobs:
 
@@ -38,7 +29,13 @@ jobs:
   # ---------------------------------------------------------------------
   # Slow: build MP-SPDZ and run the circuit.
   # ---------------------------------------------------------------------
+  # DISABLED. Performance work is out of scope until the conformance target in
+  # docs/conformance.md passes. This job measures a circuit known not to
+  # implement the PLAS functionality; running it produces precise numbers for
+  # the wrong computation. Re-enable only after conformance, by removing the
+  # `if: false` below.
   mpc:
+    if: false
     runs-on: ubuntu-latest
     needs: reference
     timeout-minutes: 90

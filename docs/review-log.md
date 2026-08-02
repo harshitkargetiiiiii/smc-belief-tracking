@@ -172,3 +172,52 @@ open until someone with actual MPC expertise addresses them.
 - **Resolution:** Recorded in `docs/gap.md`. Highest-value fix identified: make
   CI compare MPC output against the reference oracle.
 - **Status:** `open`
+
+### R-10 — No paper contribution remains; stop the project
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 2, issue #1
+- **Targets:** other
+- **Objection:** "Nobody appears to have implemented it" is an engineering gap,
+  not a research contribution. Implementing and timing a 2012 construction is
+  not a paper absent a new protocol, theorem, compiler, security result, or
+  empirically supported systems insight. Explicitly *not* a finding that cost is
+  prohibitive — there is no faithful implementation to draw that from.
+- **Assessment:** Accepted without challenge. No concrete counter-evidence
+  exists. The gate proposed — reopen only on an independent literature review
+  producing a specific, new, falsifiable contribution stated *before* further
+  implementation — is the correct discipline, and is the reverse of how this
+  project started (implementation first, story after).
+- **Resolution:** Paper work stopped. README leads with the stop. Performance CI
+  disabled (`if: false`). Circuits marked non-conforming.
+- **Status:** `resolved`
+
+### R-11 — Conformance target, not oracle-comparison CI, is the first move
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 2, issue #1
+- **Targets:** other
+- **Objection:** CI automates a defined functionality; it cannot define one.
+  Comparing MPC against `reference/` would confirm only that two non-conforming
+  models agree — `reference/` implements our model, not PLAS. The first move is
+  an executable conformance target: transcribe the Figures 8-9 contract, build a
+  tiny fixture with an accepted *and* a rejected invocation, write an
+  independent plaintext oracle, then the smallest MPC circuit that matches.
+- **Assessment:** Correct, and it invalidates the move I proposed. My oracle is
+  single-observer, stateless, with no rejection semantics. Comparing against it
+  would have produced a green check for the wrong thing.
+- **Resolution:** `docs/conformance.md` written as the gate. Not implemented —
+  awaiting a decision on whether to run it as a diagnostic exercise.
+- **Status:** `open`
+
+### R-12 — README internally inconsistent after partial edit
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 2, issue #1
+- **Targets:** other
+- **Objection:** README still opened "An implementation of", closed with
+  "implements and benchmarks", said "Claim 2 is the way out", and kept checklist
+  items to migrate to and verify the refuted claims.
+- **Assessment:** Correct. Leftovers from patching rather than rewriting.
+- **Resolution:** README rewritten from scratch.
+- **Status:** `resolved`

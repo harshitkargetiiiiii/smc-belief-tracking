@@ -1,3 +1,7 @@
+# NON-CONFORMING. Does not implement the PLAS 2012 ideal functionality.
+# Reveals the accept/reject verdict publicly (PLAS SS4.4 forbids this), tracks
+# one observer/target pair, carries no state between invocations.
+# See docs/gap.md and docs/conformance.md. Do not extend; do not benchmark.
 import sys
 DOM  = int(program.args[1]) if len(program.args)>1 else 91
 FB   = int(program.args[2]) if len(program.args)>2 else 16

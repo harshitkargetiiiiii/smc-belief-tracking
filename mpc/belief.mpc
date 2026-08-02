@@ -1,3 +1,7 @@
+# NON-CONFORMING. Does not implement the PLAS 2012 ideal functionality.
+# Reveals the accept/reject verdict publicly (PLAS SS4.4 forbids this), tracks
+# one observer/target pair, carries no state between invocations.
+# See docs/gap.md and docs/conformance.md. Do not extend; do not benchmark.
 # SMC belief tracking, one update step.
 # 3 parties, secrets x1,x2,x3 in D = {10..100}, |D| = 91.
 # Observer P1 holds a joint belief over (x2,x3): 91*91 = 8281 states.

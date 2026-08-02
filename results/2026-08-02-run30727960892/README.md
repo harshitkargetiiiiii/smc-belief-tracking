@@ -27,3 +27,10 @@ mechanism.
 
 Also: GitHub runners are shared and noisy. Treat absolute wall-clock as
 indicative; round counts and data volumes are reliable.
+
+---
+
+**Superseded by the round-2 review.** These numbers establish only that adding
+~50 ms of delay to an ~80-round program adds ~4 s. They validate the harness.
+They do not validate the mechanism and are not a publishable result. No further
+performance runs until `docs/conformance.md` passes.

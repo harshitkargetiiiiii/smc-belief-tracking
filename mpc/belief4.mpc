@@ -1,4 +1,10 @@
-# Multi-round belief revision WITH renormalisation (secure division) -- the honest version.
+# NON-CONFORMING. Does not implement the PLAS 2012 ideal functionality.
+# Reveals the accept/reject verdict publicly (PLAS SS4.4 forbids this), tracks
+# one observer/target pair, carries no state between invocations.
+# See docs/gap.md and docs/conformance.md. Do not extend; do not benchmark.
+# BROKEN: q is built once for Q_0 before the loop while the query varies per
+# round (x2+r, x3+r). Rounds r>0 condition on Q_r output using the Q_0 table.
+# The published "20 rounds = 1.61s" figure measures an incoherent computation.
 DOM  = int(program.args[1]) if len(program.args)>1 else 91
 FB   = int(program.args[2]) if len(program.args)>2 else 16
 KB   = int(program.args[3]) if len(program.args)>3 else 31

@@ -1,3 +1,7 @@
+# NON-CONFORMING. Does not implement the PLAS 2012 ideal functionality.
+# Reveals the accept/reject verdict publicly (PLAS SS4.4 forbids this), tracks
+# one observer/target pair, carries no state between invocations.
+# See docs/gap.md and docs/conformance.md. Do not extend; do not benchmark.
 # FULL JOINT over D^3 : the general (unfactored) belief-tracking cost.
 DOM = int(program.args[1]); FB=int(program.args[2]); KB=int(program.args[3])
 LO=10; N=DOM**3
