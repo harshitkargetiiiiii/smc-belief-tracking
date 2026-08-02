@@ -1,99 +1,137 @@
 """
-The conformance fixture, pinned with HAND-DERIVED expected values.
+Conformance tests, ALL-OUTPUTS semantics (corrected after round 3).
 
-The expected outputs below were computed by hand from the PLAS contract (see the
-derivation in docs/conformance.md), NOT read off the oracle. A test that only
-checks the oracle against itself proves nothing; these literals are the
-independent ground truth the oracle — and later the MPC circuit — must match.
-
-Fixture: 3 parties, domain {0,1,2}, uniform prior, thresholds all 1/2,
-secrets (0,0,1). Two invocations:
-  inv1 = p1_is_max   real output 0
-  inv2 = any_is_2    real output 0
-
-Hand-derived facts:
-  inv1: party 0 accepts (belief 9 -> 8 states), parties 1,2 reject.
-  inv2: party 0 rejects (belief unchanged, stays 8 states),
-        parties 1 and 2 accept.
+Expected values are HAND-DERIVED from the PLAS contract, not read off the
+oracle. The centerpiece, test_discriminating_case, computes BOTH the correct
+all-outputs decision and the buggy actual-output-only decision and asserts they
+DIFFER — so it pins the exact error round 3 found and cannot pass if the oracle
+reverts to actual-only.
 """
-
 from fractions import Fraction
 
 import pytest
 
-from oracle import SmcBeliefTracking, REJECT
+from oracle import (
+    SmcBeliefTracking, REJECT, condition, tcheck_passes, marginal_max,
+)
 
+F = Fraction
 DOMAIN = [0, 1, 2]
-SECRETS = (0, 0, 1)
-THRESHOLDS = [Fraction(1, 2)] * 3
+HALF = F(1, 2)
 
 Q_P1_IS_MAX = lambda s: int(s[0] >= s[1] and s[0] >= s[2])
-Q_ANY_IS_2 = lambda s: int(2 in s)
-
-# Hand-derived expected recipient-visible outputs
-EXPECTED_INV1 = [0, REJECT, REJECT]
-EXPECTED_INV2 = [REJECT, 0, 0]
+Q_SUM_EVEN = lambda s: int(sum(s) % 2 == 0)
 
 
-@pytest.fixture
-def model():
-    return SmcBeliefTracking(DOMAIN, SECRETS, THRESHOLDS)
+# ============================================================
+# Scenario 1 — the discriminating regression (the important one)
+# Fresh model, secrets (0,0,1), t=1/2, query p1_is_max, recipient 0.
+# Hand derivation (CONTRACT.md):
+#   delta_0 = uniform over {(0,x1,x2)} = 9 states.
+#   actual output 0 -> branch excludes (0,0,0): 8 states, x1 marginal max 3/8.
+#     => actual-output-only check would ACCEPT (3/8 <= 1/2).
+#   alternate output 1 -> only (0,0,0): x1 marginal = 1 > 1/2.
+#     => correct all-outputs check REJECTS.
+# ============================================================
+
+def test_discriminating_case():
+    m = SmcBeliefTracking(DOMAIN, (0, 0, 1), [HALF] * 3)
+    d0 = m.beliefs[0]
+    assert len(d0) == 9
+
+    # actual output branch: safe on its own
+    actual = condition(d0, lambda s: Q_P1_IS_MAX(s) == 0)
+    assert len(actual) == 8
+    assert marginal_max(actual, 1) == F(3, 8)
+    assert marginal_max(actual, 1) <= HALF          # actual-only would accept
+
+    # alternate output branch: unsafe
+    alt = condition(d0, lambda s: Q_P1_IS_MAX(s) == 1)
+    assert alt == {(0, 0, 0): F(1)}
+    assert marginal_max(alt, 1) == F(1)             # > 1/2
+
+    # correct semantics rejects; the two decisions differ
+    assert tcheck_passes(d0, Q_P1_IS_MAX, 1, HALF) is False
+
+    visible = m.invoke(Q_P1_IS_MAX)
+    assert visible[0] == REJECT                     # recipient 0 rejects
+    assert m.beliefs[0] == d0                       # reject leaves belief intact
 
 
-def test_initial_belief_support_is_domain_squared(model):
-    # delta_j = prior | (x_j = s_j): 3^3 states pinned on one coord -> 9 states.
+# ============================================================
+# Scenario 2 — divergence + accept-then-reject state preservation
+# secrets (0,0,1), t=1/2. inv1 sum_even -> all accept; inv2 p1_is_max.
+# (This fixture does NOT distinguish the two semantics; Scenario 1 does.
+#  It is here for divergence and reject-state-preservation only.)
+# ============================================================
+
+def test_inv1_all_accept_and_change():
+    m = SmcBeliefTracking(DOMAIN, (0, 0, 1), [HALF] * 3)
+    before = [dict(b) for b in m.beliefs]
+    assert m.invoke(Q_SUM_EVEN) == [0, 0, 0]
     for j in range(3):
-        assert len(model.beliefs[j]) == 9
+        assert m.beliefs[j] != before[j]            # every accept changed belief
+    assert len(m.beliefs[2]) == 5                    # sum-odd branch
 
 
-def test_inv1_visible_outputs_match_hand_derivation(model):
-    assert model.invoke(Q_P1_IS_MAX) == EXPECTED_INV1
+def test_inv2_divergence_and_reject_preserves_state():
+    m = SmcBeliefTracking(DOMAIN, (0, 0, 1), [HALF] * 3)
+    m.invoke(Q_SUM_EVEN)
+    after1 = [dict(b) for b in m.beliefs]
+
+    visible = m.invoke(Q_P1_IS_MAX)
+    assert visible == [0, 0, REJECT]                 # divergence: 0,1 accept; 2 rejects
+    assert visible[2] == REJECT
+    assert visible[0] != REJECT and visible[1] != REJECT
+
+    assert m.beliefs[2] == after1[2]                 # THE preserved-state property
+    assert len(m.beliefs[2]) == 5                    # did not collapse
+    assert m.beliefs[1] != after1[1]                 # an accepting party did change
 
 
-def test_inv1_party0_belief_shrinks_to_8_states(model):
-    model.invoke(Q_P1_IS_MAX)
-    # accepted: delta_0 conditioned on p1_is_max == 0 removes exactly (x1,x2)=(0,0)
-    assert len(model.beliefs[0]) == 8
+# ============================================================
+# Unit tests on the primitives, with explicit hand-built beliefs
+# ============================================================
+
+def _uniform_2x2():
+    return {(a, b): F(1, 4) for a in (0, 1) for b in (0, 1)}
 
 
-def test_inv1_rejecting_parties_keep_initial_belief(model):
-    before = [dict(b) for b in model.beliefs]
-    model.invoke(Q_P1_IS_MAX)
-    assert model.beliefs[1] == before[1]      # party 1 rejected -> unchanged
-    assert model.beliefs[2] == before[2]      # party 2 rejected -> unchanged
+def test_equality_boundary_allowed():
+    """Every branch's marginal is exactly 1/2; '<=' accepts, strict '<' would not."""
+    b = _uniform_2x2()
+    q = lambda s: s[0]                               # outputs {0,1}, each splits x1 evenly
+    assert tcheck_passes(b, q, 1, HALF) is True      # 1/2 <= 1/2
+    assert tcheck_passes(b, q, 1, F(2, 5)) is False  # 1/2 > 2/5
 
 
-def test_inv2_divergence_and_state_preservation(model):
-    model.invoke(Q_P1_IS_MAX)
-    after_inv1 = [dict(b) for b in model.beliefs]
-
-    visible = model.invoke(Q_ANY_IS_2)
-    assert visible == EXPECTED_INV2
-
-    # per-recipient divergence: 0 rejects, 1 and 2 accept, same invocation
-    assert visible[0] == REJECT
-    assert visible[1] != REJECT and visible[2] != REJECT
-
-    # THE property the mpc/ circuits violate: reject leaves belief untouched.
-    assert model.beliefs[0] == after_inv1[0]
-
-    # accepting parties did change
-    assert model.beliefs[1] != after_inv1[1]
-    assert model.beliefs[2] != after_inv1[2]
+def test_unrealized_output_not_checked():
+    b = _uniform_2x2()
+    q = lambda s: int(s[0] == 7)                     # always 0 on this support
+    assert {q(s) for s in b} == {0}
+    assert tcheck_passes(b, q, 1, HALF) is True      # sole branch marginal 1/2
 
 
-def test_reject_does_not_collapse_to_singleton(model):
-    """The sharp version: on inv2 party 0's belief must NOT become the single
-    posterior state it would if the reject had (wrongly) updated it."""
-    model.invoke(Q_P1_IS_MAX)
-    model.invoke(Q_ANY_IS_2)
-    # had the reject wrongly updated, support would drop to 3 states.
-    assert len(model.beliefs[0]) == 8
+def test_condition_on_impossible_raises():
+    with pytest.raises(ValueError):
+        condition(_uniform_2x2(), lambda s: False)
 
 
-def test_state_signature_is_stable_across_reject(model):
-    model.invoke(Q_P1_IS_MAX)
-    sig_before = model.state_signature()[0]
-    model.invoke(Q_ANY_IS_2)          # party 0 rejects
-    sig_after = model.state_signature()[0]
-    assert sig_before == sig_after
+def test_non_uniform_prior_rejects():
+    # delta_0 = prior|(x0=0) = {(0,0):2/3,(0,1):1/3}; Q="x1==0".
+    # alternate output 1 => x1=0 with certainty => reject.
+    prior = {(0, 0): F(1, 2), (0, 1): F(1, 4), (1, 0): F(1, 8), (1, 1): F(1, 8)}
+    m = SmcBeliefTracking([0, 1], (0, 0), [HALF, HALF], prior)
+    assert m.invoke(lambda s: int(s[1] == 0)) == [REJECT, REJECT]
+
+
+def test_inconsistent_prior_raises():
+    with pytest.raises(ValueError):
+        SmcBeliefTracking([0, 1], (1, 1), [HALF, HALF], {(0, 0): F(1)})
+
+
+def test_threshold_out_of_range_raises():
+    with pytest.raises(ValueError):
+        SmcBeliefTracking([0, 1], (0, 0), [F(0), HALF])
+    with pytest.raises(ValueError):
+        SmcBeliefTracking([0, 1], (0, 0), [F(3, 2), HALF])

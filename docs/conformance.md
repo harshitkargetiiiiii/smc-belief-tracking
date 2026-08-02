@@ -1,18 +1,22 @@
-# STATUS (2026-08-02)
+# STATUS (2026-08-02, round 3 correction)
 
-Steps 1-3 DONE and under review; step 4 (MPC circuit) NOT started.
+Steps 1-3 REDONE after round-3 review refuted the first attempt; step 4 (MPC)
+NOT started.
 
-- Step 1 (contract transcription): `conformance/CONTRACT.md` — cited, but
-  citations need a human check against the PDF.
-- Step 2 (fixture): 3 parties, domain {0,1,2}, secrets (0,0,1), thresholds 1/2,
-  two invocations. Exercises accept-then-reject state preservation AND
-  per-recipient divergence. Hand-derived in `conformance/CONTRACT.md`.
-- Step 3 (independent oracle): `conformance/oracle.py` + `test_conformance.py`,
-  7 hand-derived assertions passing. Written fresh from the contract, not from
-  the circuits or `reference/`.
-- Step 4 (smallest MPC circuit matching the fixture): NOT started. This is where
-  the real difficulty is (private per-recipient output, persistent secret state).
-  A functional match will NOT establish the reject-unobservability property.
+Round-3 finding (issue #2): `tcheck` must quantify over ALL POSSIBLE outputs
+(Fig. 4 line 2), not the actual output. The first oracle checked only the actual
+output — a different, leak-prone functionality. Fixed.
+
+- Step 1: `conformance/CONTRACT.md` — corrected quantifier, Fig. 4 quoted,
+  added clauses (deterministic scope, public queries, prior consistency,
+  0<t<=1, §4.5 sharing). Citations still need a human PDF check.
+- Step 2: fixture `sum_even` then `p1_is_max`, secrets (0,0,1), t=1/2 — shows
+  divergence and reject-state-preservation. PLUS a discriminating single-shot
+  example that distinguishes all-outputs from actual-only.
+- Step 3: `conformance/oracle.py` + `test_conformance.py`, 9 hand-derived
+  assertions. The centerpiece asserts the correct and buggy decisions DIFFER, so
+  a revert to actual-only fails the suite.
+- Step 4: NOT started.
 
 Original target spec follows.
 
