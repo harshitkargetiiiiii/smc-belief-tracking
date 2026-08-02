@@ -223,3 +223,46 @@ open until someone with actual MPC expertise addresses them.
 - **Assessment:** Correct. Leftovers from patching rather than rewriting.
 - **Resolution:** README rewritten from scratch.
 - **Status:** `resolved`
+
+### R-13 — tcheck must quantify over ALL possible outputs, not the actual one
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 3, issue #2
+- **Targets:** contract, oracle, fixture
+- **Objection:** The transcription conditioned the safety check on the actual
+  output only. Figure 4 line 2 is `forall possible outputs o`; the reject
+  condition is `exists o, exists n: (delta|out=o)(x_i=n) > t_i`. Checking only
+  the realized output makes the decision secret-dependent and lets the rejection
+  leak (Sec 3.2, simulatability). The fixture's accepts were an artifact of the
+  bug; corrected, invocation-1 of the old fixture is all-reject.
+- **Assessment:** Correct and fatal. Verified from Figure 4 directly via a
+  targeted read: line 2 reads "forall possible outputs o". Not taken on the
+  reviewer's word. The whole simulatable-rejection property depends on it.
+- **Resolution:** oracle rewritten to all-outputs semantics; old fixture and its
+  7 tests invalidated; new fixture + 9 tests including a discriminating case that
+  asserts all-outputs and actual-only give different results. CONTRACT.md
+  corrected. Added clauses: deterministic-query scope, public queries, prior
+  consistency, 0<t<=1, §4.5 (not Fig 8) for sharing.
+- **Status:** `resolved`
+
+### R-14 — Boundary is `<=` (equality allowed); other clarifications
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, round 3, issue #2
+- **Targets:** contract
+- **Objection:** Confirmed `<=` (reject only on strict `>`). Also: the oracle is
+  a deterministic-query model and must not call itself the full PLAS
+  functionality; a single fixture is a regression vector not a proof;
+  reject-unobservability is not "untestable" absolutely — interface tests catch
+  gross violations (public reveal), they just can't prove simulation-based
+  non-observability.
+- **Assessment:** All correct.
+- **Resolution:** Scope stated in oracle docstring and CONTRACT.md; targeted
+  tests added; unobservability reframed as a mandatory requirement with
+  functional negative tests plus required expert review.
+- **Status:** `resolved`
+
+### R-11 (update)
+
+- Steps 1-3 redone under the corrected semantics and re-submitted for review
+  (issue #3). Step 4 still not started. Still `in_progress`.
