@@ -1,152 +1,134 @@
-# Claims to verify
+# Claims — ALL THREE REFUTED
 
-Two observations make this project cheap. Neither appears in the PLAS 2012
-paper. Neither has been checked by anyone who knows MPC.
+External adversarial review, 2026-08-02, refuted all three claims.
+Full review: https://github.com/harshitkargetiiiiii/smc-belief-tracking/issues/1
 
-**Treat both as hypotheses.** If either is wrong, most of the cost analysis in
-the README goes with it, and the project needs rethinking rather than
-continuing. Verifying these is the first real work, and it is what makes the
-resulting paper yours rather than a summary of someone else's.
+This file is kept as a record of what we got wrong and why. Do not build on
+anything below. Nothing here is a live claim.
 
 ---
 
-## Claim 1: the conditioning step is communication-free
+## Claim 1 — "conditioning is communication-free" — REFUTED
 
-### Statement
+**What we claimed.** `1[Q(s)=o] = Q(s)·o + (1−Q(s))·(1−o)` is linear in the
+secret output `o` with public coefficients, therefore local, therefore
+Bayesian conditioning costs nothing.
 
-In any linear secret-sharing scheme, Bayesian conditioning on a public
-hypothesis space with a secret observation requires no multiplications, no
-communication, and no rounds.
+**Why it is wrong.** The indicator is not the update. The update is
 
-### Argument
+    [w'_s] = [w_s] · [i_s]
 
-The Bayesian update is
+Computing the indicator locally does not help, because it must then be
+multiplied by the secret belief weight. That is a secret × secret
+multiplication. We wrote the update equation correctly and then silently
+dropped the `delta(s)` factor from our own reasoning about it.
 
-    delta'(s) proportional to delta(s) * 1[Q(s) = o]
+**The implementation proves it.** In `mpc/belief3.mpc`, `prior.get_vector().v *
+ind` is exactly that multiplication, and MP-SPDZ reported **41,098
+multiplications** — a number we printed in the README three lines below the
+words "zero multiplications."
 
-For each enumerated state `s`:
+**A second error.** We assumed `Q(s)` is public. In our own circuit
+`ge = (x1 >= domv)` makes it depend on the secret `x1`, so `q` is secret too.
+The premise fails in our code even where it might hold in principle.
 
-- `Q` is public. All parties agree the query before running it; that is what
-  makes a knowledge-threshold policy meaningful in the first place.
-- `s` is an enumerated hypothesis, not a secret. The observer is reasoning over
-  all possible values.
-- Therefore `Q(s)` is a **public constant**.
-- Only the observed output `o` is secret.
+**Why it does not hold in principle either.** PLAS 2012's real-world state
+`Sigma_T` carries the beliefs secret-shared between invocations (Section 4.5).
+Initialization sets `delta_j = delta | (x_j = s_j)`, so even a public common
+prior becomes party-specific state depending on secret `s_j`. After any
+accepted observation the carried posterior depends on secret outputs. The
+weights are secret from the second update onward, and usually from the first.
 
-So the indicator can be written
+**The folklore question, answered.** The part that is true — public-constant ×
+share is local — is foundational, not a contribution:
 
-    1[Q(s) = o] = Q(s)*o + (1 - Q(s))*(1 - o)
+- Cramer, Damgård & Maurer, *General Secure Multi-Party Computation from any
+  Linear Secret Sharing Scheme*, EUROCRYPT 2000. https://eprint.iacr.org/2000/037
+- Trident, NDSS 2020, §III-A(d) — states it explicitly and contrasts it with
+  secret multiplication.
+- MP-SPDZ documents secret/clear as local and secret/secret as `MULS`.
 
-which is **linear in `o` with public coefficients**. Public-constant times
-secret-share is a local operation in any linear scheme. No interaction.
+So the true half is textbook and the novel half is false.
 
-A corollary: the threshold check needs no division. With public `t`,
+**Also wrong:** "one secure comparison for the entire check." Removing the
+division is valid, but the secret maximum over 91 marginals still needs ~90
+comparisons and selections. Our own tournament at `belief3.mpc:42-56` does
+exactly that.
 
-    max_v m_v / Z <= t     becomes     max_v m_v <= t * Z
-
-again public-times-secret. One secure comparison for the entire check.
-
-### What to check
-
-- [ ] Is the linearity argument actually right for replicated secret sharing
-      over Z_2^k specifically, not just "linear schemes" in the abstract?
-- [ ] Does MP-SPDZ actually compile this to a local operation? Read the emitted
-      bytecode, do not trust the multiplication counter alone.
-- [ ] Does anything downstream branch on a revealed value? A `@for_range` whose
-      bound depends on a secret would break obliviousness silently.
-- [ ] Is the circuit structure itself independent of all secrets? The circuit is
-      public; if its shape depends on a secret, that leaks regardless of what
-      the wires carry.
-
-### Why it might be wrong
-
-The most likely failure is that this is already folklore in the MPC community
-and simply too obvious to write down — in which case the observation is correct
-but not a contribution. Ask someone before building a paper on it.
+**Also overgeneralized:** the affine identity holds only for binary `q_s, o`.
+For larger output alphabets, `[q_s = o]` needs an equality test or a one-hot
+secret output, and producing that is non-linear.
 
 ---
 
-## Claim 2: indicator conditioning is exact in integers
+## Claim 2 — "indicator conditioning is exact in integers" — REFUTED AS STATED
 
-### Statement
+A narrow lemma survives: in *unbounded* arithmetic, multiplying bounded
+non-negative integer weights by deterministic 0/1 likelihoods does not increase
+them, and a rational threshold can be checked by cross-multiplication. That is
+elementary exact arithmetic, not an MPC result.
 
-For deterministic queries there is no fixed-point error, because there is no
-fixed point. Bayesian conditioning under a 0/1 likelihood is exact integer
-arithmetic.
+What was wrong with the claim as stated:
 
-### Argument
+1. **Not implemented.** Every circuit in this repo uses `sfix`. Python
+   `Fraction` agreeing with Python `int` says nothing about MP-SPDZ ring
+   behaviour, security, or cost.
+2. **The prior is silently restricted.** `belief_exact.py` hard-codes a uniform
+   prior. PLAS accepts a general common belief. A rational prior needs a common
+   integer scaling that may dominate the bit budget; arbitrary real priors are
+   not exactly representable.
+3. **Z_2^k is not unbounded.** With `S` states and weights `<= W`, a
+   conservative signed-comparison requirement is `max(a,b) · S · W < 2^(k−1)`,
+   plus whatever the comparison protocol needs internally. We proved and
+   enforced no such bound. Public multiplication by `b` can wrap locally and
+   still yield the wrong policy decision.
+4. **The tests do not test what we said they test.** The parameterized
+   multi-round test repeats the *same* query with the *same* observation, and
+   indicator conditioning is idempotent in that case — which the very next test
+   confirms. No changing queries, mixed observations, arbitrary priors, or
+   ring-boundary cases. `similar_w` is only tested as a plaintext Boolean.
+5. **The p = 1/2 estimate is mathematically wrong.** At p = 1/2 both likelihoods
+   are 1/2, the observation conveys no information, the common denominator
+   cancels, and zero extra bits are needed per round — not one. For p = A/B the
+   bound involves `max(A, B−A)^R` with possible common-factor reduction, not
+   `B^R`. The "60–70 revisions" figure does not follow from the representation
+   we described.
+6. **The overflow example was backwards.** For `t = a/b = 1/1000` it is `b·M`
+   that gets the factor 1000, not `a·Z`.
 
-Represent the belief as unnormalised non-negative integer weights rather than
-normalised fixed-point probabilities.
-
-- Conditioning multiplies each weight by 0 or 1. Weights never grow, never
-  round, never lose precision.
-- Renormalisation is only needed to keep magnitudes in range. Under indicator
-  conditioning magnitudes are non-increasing, so **it can be dropped entirely**.
-- The threshold check against a public rational `t = a/b` becomes
-  `b * max_v m_v <= a * Z`. Exact. No division.
-
-Error: zero. Not "small". Zero.
-
-This covers two of the paper's three benchmark queries completely
-(`richest`, `similar_w`).
-
-`reference/test_reference.py::test_integer_matches_exact_rational` is the
-empirical backing.
-
-### Where it breaks
-
-`richest_p`, the noisy maximum. Likelihoods are `p` and `1-p`, so weights get
-multiplied by rationals and denominators compound as `b^R` over `R` rounds.
-
-Back-of-envelope: with `p = 1/2` you need roughly one extra bit per round.
-Starting from `ceil(log2 8281) = 13` bits of prior in a 128-bit ring, leaving
-~40 bits of slack for comparisons, that is **roughly 60-70 exact revisions**
-before overflow.
-
-That number is a bit-budget estimate, not a proof and not a measurement.
-
-### What to check
-
-- [ ] Prove the overflow bound properly rather than estimating it.
-- [ ] Confirm weights genuinely stay bounded across long revision sequences for
-      `similar_w`, not just `richest`.
-- [ ] Check the comparison `b*M <= a*Z` does not overflow for realistic `a`, `b`.
-      Thresholds like 1/1000 make `a*Z` large.
-- [ ] Migrate `mpc/belief3.mpc` from `sfix` to `sint` integer weights and
-      confirm the measured cost drops as predicted. **Not yet done** - the
-      current circuits still use fixed point.
-
-### Why this matters
-
-Renormalisation is ~80% of the measured runtime *and* 100% of the precision
-problem. If claim 2 holds, dropping it removes both at once. The 2012 paper
-could not have seen this because it worked in the reals, where the distinction
-between "normalised probability" and "unnormalised weight" is invisible.
+Salvageable only as a bounded-arithmetic lemma for representable rational
+priors, after an explicit ring bound and a real `sint` implementation.
 
 ---
 
-## The thing neither claim covers
+## Claim 3 — "the recursion objection does not apply" — REFUTED
 
-Multi-round tracking with a **non-factorable posterior**. After conditioning,
-the joint is not a product of marginals, so round 2 needs the full explicit
-table carried as secret state. Fine at 8281 states; hopeless at 6 parties.
+**What we claimed.** PLAS's "belief tracking is a recursive interpreter"
+objection dissolves because the query is public, so you specialise at compile
+time.
 
-The idea worth exploring: compile the *conjunction of all past observations*
-into one weighted Boolean formula over `(s, o_1, ..., o_R)`, leaving the `o_r`
-free. Structure depends only on the public queries; the secret outputs enter as
-weights at evaluation time. One weighted-model-counting pass gives the current
-posterior marginal with no explicit table and no accumulated error.
+**Why it is wrong.** PLAS states in Sections 4.3 and 4.6 that `Q` is public and
+chosen independently of the secrets — and *then*, in Section 5, says belief
+tracking is a recursive interpreter and hard in SMC. They already assumed what
+we thought they had overlooked. Their objection cannot be explained by it.
 
-That is: compile the observation history, do not materialise the posterior.
+We also invented the universal-circuit reading. The paper never says a secret
+query would require one.
 
-This was not found in the literature during the initial survey, but the survey
-was not exhaustive — Google Scholar and Semantic Scholar were both unreachable.
-Search properly before claiming novelty. Relevant prior art to read first:
-Dice (OOPSLA 2020), Bit Blasting Probabilistic Programs (PLDI 2024), and the
-`rsdd` BDD library that Dice is built on.
+And a public query supplied *per invocation* is not a query fixed when a binary
+is compiled. Specialising one known query yields one query-specific circuit; it
+does not implement `threshold_SMC(Q)` for arbitrary later queries or adaptively
+chosen sequences. This repo has no query language, no interpreter, no partial
+evaluator, no compiler from `Q`, and no correctness theorem for specialisation.
+It has hand-written circuits for one Boolean query.
 
-Catch: Dice's optimisations (flip-lifting, determinism elimination) inspect
-probability values, so compiling with secret priors would make the BDD
-structure secret-dependent — which leaks, since structure is public. Symbolic
-weights only.
+---
+
+## What this leaves
+
+The engineering question PLAS left open is still open — nobody has implemented
+SMC belief tracking. What is dead is our explanation for why it would be cheap,
+and with it the 22.6 ms figure, which times a partial computation that is not
+the PLAS functionality.
+
+See `docs/gap.md` for what a real implementation would have to do.
