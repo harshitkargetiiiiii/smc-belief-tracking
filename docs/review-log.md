@@ -733,3 +733,33 @@ open until someone with actual MPC expertise addresses them.
   ADVERSARY.md + docs updated. Conformance suite UNCHANGED; Sigma_T NOT started.
   86 conformance tests green (46 functional + 40 private-gate).
 - **Status:** `open` (awaiting gate-2 re-review)
+
+### R-44 — Gate 2 re-review-4 REFUTED: `asm_open(False)` is still a public reveal
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, gate-2 re-review (4th), issue #5 comment `#5161455210`.
+- **Objection:** The re-review-3 gate's open check was built on a WRONG premise —
+  that an open with the `True` flag is public and a `False` open is safe. In
+  MP-SPDZ, `asm_open(..., False, ...)` is STILL a public reveal; the `False` flag
+  only disables the post-open correctness check, not privacy. So
+  `final_verdict.reveal(False)` placed in an `(EQZ|LTZ)\(`-named subtape
+  reconstructs the verdict to all parties and bypassed all three layers (no
+  stdout, no `privateoutput`, no sink — just a `False` open the gate allowed).
+- **Assessment:** Correct and decisive. Reproduced end-to-end: a spoofed
+  `EQZ(3)_63` subtape doing `sint.load_mem(...).reveal(False)` compiled to
+  `asm_open 3, False, c0, s0` and the re-review-3 gate ACCEPTED it.
+- **Resolution (one commit).** The gate no longer relies on the open flag.
+  `is_private_manifest` now pins the non-main tape base MULTISET to exactly the
+  comparison subtapes the computation must generate,
+  `{EQZ(3)_63, EQZ(81)_63, LTZ(36)_64}` (identical for both queries, verified).
+  Soundness: an author can only ADD an open (removing a real comparison breaks the
+  functional/oracle check that `private_run` already enforces), so any injected
+  open — `True` or `False` — lands in a NEW or DUPLICATE subtape and perturbs the
+  multiset. The reproduced leak duplicates `EQZ(3)_63`, so it is rejected on the
+  multiset. Kept as defense-in-depth: no open in main, no sink/`privateoutput`/
+  `cond_print` in any subtape, strict non-main name pattern, and full-assembly
+  `manifest_signature`. `threshold_smc_openfalse.mpc` committed as the fourth
+  executable negative control. ADVERSARY.md + docs corrected on the False-open
+  fact. Conformance suite UNCHANGED; Sigma_T NOT started. 88 conformance tests
+  green (46 functional + 42 private-gate).
+- **Status:** `open` (awaiting gate-2 re-review)

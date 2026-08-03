@@ -1,36 +1,35 @@
-# STATUS (2026-08-02, gate 2 re-review-3 fixes: private delivery)
+# STATUS (2026-08-02, gate 2 re-review-4 fixes: private delivery)
 
-Gate 2's re-review flagged more evidence-binding gaps, and an independent
-adversarial pass found a CRITICAL name-spoof leak; all closed in one commit.
-Sigma_T persistence remains UNAUTHORIZED. Conformance suite + evidence gate
-UNCHANGED.
+Re-review-4 corrected a WRONG premise in the re-review-3 gate: `asm_open(...,
+False, ...)` is ALSO a public reveal (the flag only skips the post-open check, not
+privacy), so a `reveal(False)` of a verdict in a masked-named subtape leaked.
+Fixed by pinning the comparison-subtape multiset. Sigma_T persistence remains
+UNAUTHORIZED. Conformance suite + evidence gate UNCHANGED.
 
-Bypasses closed:
+Delivery inspection (`delivery_inspect.py`) now binds on CONTENT + a pinned tape
+multiset, with NO reliance on the open flag:
 
-- **Name-spoof subtape leak (CRITICAL)**: `program.new_tape(fn, name='EQZ(spoof)')`
-  writes the tape name verbatim, so a subtape delivering party 1's verdict to
-  player 0 via `privateoutput` + a `binary_output()` file sink passed the old
-  name-based allowlist (verified end-to-end — it was ACCEPTED). `delivery_inspect.py`
-  now binds on CONTENT across the whole manifest: `privateoutput` only in main with
-  players [0,0,1,1,2,2] (none in any subtape); NO public open-to-all (the `True`
-  open flag) anywhere — masked comparison opens carry `False`; NO file/socket/print
-  sink outside guarded `cond_print` in main; every non-main tape must match the
-  strict compiler pattern `^(EQZ|LTZ)\(\d+\)_\d+$`. A digit-named spoof is still
-  caught by the content rules. `threshold_smc_namespoof.mpc` is a committed
-  executable negative control.
-- **Signature collision**: `manifest_signature` now hashes the FULL normalized
-  assembly of every tape (was a 4-pattern subset that collided on injected sinks).
-- **Replay / unbound input_hash / unchecked verdict values**: under `--recompute`
-  the validator binds each record to a canonical case — recomputing `input_hash`
-  and the plaintext-oracle `(ACCEPT, PAYLOAD)` from the pinned CASES and requiring
-  a bijection. Four clones with distinct `case_id`s, a forged verdict value, and an
-  `input_hash` not tied to a canonical case are all rejected.
-- **Stale-assembly false rejection**: `compile_manifest` clears stale
-  `{prefix}-{stem}-{query}-*` files before compiling, so a cached MP-SPDZ dir can't
-  pollute the manifest.
-- Tests: 86 in `conformance/` (46 functional conformance + 40 private-gate), all
-  green; `reference/` suite unchanged. Functional + compiled-delivery only; NOT a
-  simulation-security proof.
+- `privateoutput` only in main with players [0,0,1,1,2,2] (none in any subtape);
+  NO file/socket/print sink outside guarded `cond_print` in main; every non-main
+  tape must match `^(EQZ|LTZ)\(\d+\)_\d+$`; and — the load-bearing rule — the
+  non-main tape base multiset must be EXACTLY {EQZ(3)_63, EQZ(81)_63, LTZ(36)_64}.
+  Since an author can only ADD an open (removing a comparison breaks functional
+  conformance), any injected open — True OR False — lands in a NEW or DUPLICATE
+  subtape and breaks the multiset. `manifest_signature` hashes the full assembly.
+- FOUR committed negative controls are rejected: `threshold_smc_leaky` (public
+  reveal in main), `threshold_smc_subleak` (separate-tape reveal + print),
+  `threshold_smc_namespoof` (name-spoofed wrong-player delivery + file sink), and
+  `threshold_smc_openfalse` (a `reveal(False)` in a spoofed `EQZ(3)_63` subtape).
+
+Evidence binding (re-review-3, still in force): `validate_evidence.py --recompute`
+binds each record to a canonical case (recomputed `input_hash` + oracle
+`(ACCEPT, PAYLOAD)`, bijection required) and to a recomputed source/delivery
+signature — rejecting replay, unbound `input_hash`, forged verdict values, and
+forged bound records. `compile_manifest` clears stale assembly before compiling.
+
+Tests: 88 in `conformance/` (46 functional conformance + 42 private-gate), all
+green; `reference/` suite unchanged. Functional + compiled-delivery only; NOT a
+simulation-security proof.
 
 Original target spec follows.
 

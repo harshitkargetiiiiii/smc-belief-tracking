@@ -55,24 +55,27 @@ from those is not — and cannot be — prohibited. `payload_k = o_actual` if
 
 Demonstrated, executably:
 
-1. **Compiled delivery inspected by CONTENT, not tape NAME**
+1. **Compiled delivery inspected by CONTENT + a pinned tape multiset**
    (`delivery_inspect.py`): re-review-2 keyed the masked-subtape allowlist on the
-   tape-name substring `(EQZ|LTZ)\(`, but an author controls tape names
-   (`program.new_tape(fn, name='EQZ(spoof)')` writes the name verbatim), so a
-   subtape delivering another party's verdict to the WRONG player and writing it
-   to a file slipped through. The inspector now binds on CONTENT across the whole
-   manifest: `privateoutput` only in main with players `[0,0,1,1,2,2]` (none in
-   any subtape); NO public open-to-all (an open with the `True` flag) in ANY tape
-   — the masked comparison opens carry the `False` flag; NO cleartext/file/socket
-   sink (`print_*` / `intoutput` / `writesocket*` / …) anywhere except guarded
-   `cond_print_*` in main; and every non-main tape must be a compiler-generated
-   masked comparison tape matching `^(EQZ|LTZ)\(\d+\)_\d+$`. A digit-named spoof is
-   still caught by the content rules even though its name matches.
-   `manifest_signature` now hashes the FULL normalized assembly of every tape.
-   THREE committed negative controls are REJECTED: `threshold_smc_leaky` (public
+   tape-name substring; re-review-4 noted that `asm_open(..., False, ...)` is ALSO
+   a public reveal (the `False` flag only skips the post-open correctness check,
+   not privacy), so a `reveal(False)` of a verdict inside a masked-named subtape
+   leaked. A masked open cannot be told from a raw reveal at the opcode level, so
+   the inspector binds on CONTENT across the whole manifest AND pins the non-main
+   tape multiset: `privateoutput` only in main with players `[0,0,1,1,2,2]` (none
+   in any subtape); NO cleartext/file/socket sink (`print_*` / `intoutput` /
+   `writesocket*` / …) anywhere except guarded `cond_print_*` in main; every
+   non-main tape must match `^(EQZ|LTZ)\(\d+\)_\d+$`; and — the load-bearing rule —
+   the non-main tape base multiset must be EXACTLY the pinned comparison subtapes
+   `{EQZ(3)_63, EQZ(81)_63, LTZ(36)_64}`. Since an author can only ADD an open
+   (removing a real comparison breaks functional conformance), any injected open —
+   `True` or `False` — lands in a NEW or DUPLICATE subtape and breaks the multiset.
+   `manifest_signature` hashes the FULL normalized assembly of every tape. FOUR
+   committed negative controls are REJECTED: `threshold_smc_leaky` (public
    `reveal()` in main), `threshold_smc_subleak` (separate `@function_tape` public
-   reveal + `print_ln`), and `threshold_smc_namespoof` (name-spoofed subtape
-   delivering party 1's verdict to player 0 via `privateoutput` + a file sink).
+   reveal + `print_ln`), `threshold_smc_namespoof` (name-spoofed subtape delivering
+   to the wrong player + a file sink), and `threshold_smc_openfalse` (a
+   `reveal(False)` of party 1's verdict in a spoofed `EQZ(3)_63` subtape).
 2. **Strict runtime, exact two lines** (`private_run.py`): a correct party's
    captured STDOUT is exactly two non-empty lines — one own `ACCEPT`, one own
    `PAYLOAD`. Framework diagnostics go to stderr, so the parser skips NOTHING:
@@ -124,6 +127,11 @@ NOT claimed:
   party 1's verdict to player 0 through `privateoutput` and a `binary_output()`
   file sink — no stdout. Committed so the gate can prove CONTENT-based inspection
   rejects a leak the name-based allowlist accepted.
+- `threshold_smc_openfalse.mpc` — INTENTIONALLY LEAKY negative control #4: a tape
+  named `EQZ(3)_63` (a name the real comparison library also emits) publicly
+  reconstructs party 1's verdict with `reveal(False)` — no stdout, no sink, no
+  `privateoutput`. Committed so the gate can prove the pinned-multiset rule rejects
+  a `False` public open that the flag-based check treated as safe.
 
 ## Next gate (unauthorized until this clears)
 

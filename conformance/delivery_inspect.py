@@ -1,5 +1,5 @@
 """
-Compiled-delivery inspection by CONTENT, not tape NAME (gate 2 re-review-3).
+Compiled-delivery inspection by CONTENT + a pinned tape multiset (re-review-4).
 
 Re-review-2 keyed the masked-subtape allowlist on the tape KIND string
 (`(EQZ|LTZ)\\(`). But an .mpc author controls tape names: `program.new_tape(fn,
@@ -10,13 +10,17 @@ wrong-player `privateoutput` in a subtape was never checked.
 
 This version binds on CONTENT. Verified facts about the pinned backend
 (replicated-ring-party.x @ 9d80959):
-  * a PUBLIC reveal (open-to-all) compiles to an open instruction with the `True`
-    flag (`asm_open 13, True, ...`); the comparison library's MASKED intermediate
-    opens use the `False` flag (`vasm_open 3, 3, False, ...`).
+  * an open instruction (`asm_open`/`vasm_open`, EITHER the `True` or the `False`
+    flag) is a PUBLIC reveal -- reconstructing the value to all parties. The flag
+    only controls the post-open correctness check, NOT privacy (re-review-4:
+    `final_verdict.reveal(False)` compiles to `asm_open ..., False` and still
+    leaks). A masked comparison open is safe because it opens a BLINDED
+    intermediate, which cannot be distinguished from a raw reveal at the opcode
+    level. So the gate does NOT treat `False` opens as safe; see (f).
   * the clean private build's MAIN tape has exactly: `privateoutput` to players
     [0,0,1,1,2,2], guarded `cond_print_*`, and NO open and NO other sink.
-  * the masked EQZ/LTZ subtapes contain ONLY `False` opens and NO sink at all.
-  * the full per-tape assembly is DETERMINISTIC across compiles.
+  * the full per-tape assembly is DETERMINISTIC across compiles, and the non-main
+    tape multiset is exactly {EQZ(3)_63, EQZ(81)_63, LTZ(36)_64} for both queries.
 
 A build is private-delivering iff ALL hold:
   (a) exactly one MAIN tape ("-0"); its `privateoutput` player multiset is
@@ -32,6 +36,12 @@ A build is private-delivering iff ALL hold:
   (e) every non-main tape is a compiler-generated masked comparison tape, matched
       by the STRICT pattern `^(EQZ|LTZ)\\(\\d+\\)_\\d+$` (an author-introduced
       tape, incl. a non-digit name spoof like `EQZ(spoof)`, is rejected).
+  (f) the non-main tape base MULTISET equals the pinned comparison subtapes
+      exactly ({EQZ(3)_63, EQZ(81)_63, LTZ(36)_64}). This is the load-bearing
+      defense against a `reveal(False)` hidden in a masked-named subtape: an
+      author can only ADD an open (removing a real comparison breaks functional
+      conformance), so any injected open lands in a NEW or DUPLICATE subtape and
+      breaks the multiset. `threshold_smc_openfalse.mpc` is the committed control.
 
 manifest_signature() now hashes the FULL normalized assembly of every tape, so an
 injected sink/tape/open changes it (the old 4-pattern hash collided).
@@ -57,6 +67,14 @@ _SINK = re.compile(
     r"print_bit\w*|print_mem\w*|intoutput|floatoutput|rawoutput|"
     r"writesocket\w*|writesharestofile|writefileclear|writefileshare|"
     r"write_to_file)\b")
+
+# The EXACT non-main tape multiset the computation must generate (both queries).
+# re-review-4: `asm_open(..., False, ...)` is ALSO a public reveal (the flag only
+# skips the post-open check), and a masked open cannot be told from a raw reveal
+# at the opcode level. The load-bearing defense is therefore this pin: an author
+# can only ADD an open (removing a comparison breaks functional conformance), and
+# any added open lands in a NEW or DUPLICATE subtape, perturbing this multiset.
+EXPECTED_SUBTAPES = ("EQZ(3)_63", "EQZ(81)_63", "LTZ(36)_64")
 
 
 def compile_manifest(build_stem, query, prefix):
@@ -102,13 +120,22 @@ def _lines_matching(rx, text):
     return [l.strip() for l in text.splitlines() if rx.search(l)]
 
 
-def is_private_manifest(man):
-    """(ok, reasons) over the complete manifest, by content (see module docstring)."""
+def is_private_manifest(man, expected_subtapes=None):
+    """(ok, reasons) over the complete manifest, by content (see module docstring).
+    When expected_subtapes is given, the non-main tape base multiset must equal it
+    EXACTLY -- the load-bearing defense, since any injected open (True OR False)
+    adds/duplicates a subtape and cannot be told from a masked open by opcode."""
     reasons = []
     mains = [k for k in man if _base(k) == "0"]
     if len(mains) != 1:
         return False, [f"expected exactly one main tape, got {sorted(mains)}"]
     main = man[mains[0]]
+
+    # (f) pinned comparison-subtape multiset: an added open perturbs it
+    if expected_subtapes is not None:
+        got = sorted(_base(k) for k in man if _base(k) != "0")
+        if got != sorted(expected_subtapes):
+            reasons.append(f"non-main tape multiset {got} != pinned {sorted(expected_subtapes)}")
 
     # (a) main: correct private delivery, no open, no non-cond print
     if _privout_players(main) != [0, 0, 1, 1, 2, 2]:
@@ -180,12 +207,12 @@ def delivery_signature(main_text):
 
 
 def gate(query):
-    """Executable negative controls: private build accepted; the public-open
-    sibling, the separate-tape leak sibling, AND the name-spoof subtape sibling
-    are all rejected."""
+    """Executable negative controls: the private build is accepted; the public-open
+    (leaky), separate-tape (subleak), name-spoof, and reveal(False) (openfalse)
+    siblings are all rejected."""
     detail = {}
     priv = compile_manifest("threshold_smc_private", query, "asm_priv")
-    ok_priv, r_priv = is_private_manifest(priv)
+    ok_priv, r_priv = is_private_manifest(priv, EXPECTED_SUBTAPES)
     detail["private_ok"] = ok_priv
     detail["private_reasons"] = r_priv
     detail["private_delivery_sig"] = manifest_signature(priv)
@@ -194,12 +221,13 @@ def gate(query):
         ("threshold_smc_leaky", "leaky_rejected", "asm_leaky"),
         ("threshold_smc_subleak", "subleak_rejected", "asm_sub"),
         ("threshold_smc_namespoof", "namespoof_rejected", "asm_ns"),
+        ("threshold_smc_openfalse", "openfalse_rejected", "asm_of"),
     ):
         m = compile_manifest(stem, query, pfx)
-        detail[key] = not is_private_manifest(m)[0]
+        detail[key] = not is_private_manifest(m, EXPECTED_SUBTAPES)[0]
 
     ok = (ok_priv and detail["leaky_rejected"] and detail["subleak_rejected"]
-          and detail["namespoof_rejected"])
+          and detail["namespoof_rejected"] and detail["openfalse_rejected"])
     return ok, detail
 
 
@@ -210,7 +238,8 @@ if __name__ == "__main__":
         print(f"[delivery] {q}: private_ok={d['private_ok']} "
               f"leaky_rejected={d['leaky_rejected']} "
               f"subleak_rejected={d['subleak_rejected']} "
-              f"namespoof_rejected={d['namespoof_rejected']} -> {'PASS' if ok else 'FAIL'}")
+              f"namespoof_rejected={d['namespoof_rejected']} "
+              f"openfalse_rejected={d['openfalse_rejected']} -> {'PASS' if ok else 'FAIL'}")
         if d["private_reasons"]:
             print("   ", d["private_reasons"])
         all_ok = all_ok and ok

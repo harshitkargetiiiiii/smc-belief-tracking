@@ -124,57 +124,77 @@ def test_classifier_rejects_wrong_players():
 
 
 # ---- CONTENT-based complete-manifest inspector (synthetic manifests) ----
-# masked comparison subtapes: compiler-generated digit names + `False` opens only.
+# masked comparison subtapes: the pinned multiset + `False` opens only. A `False`
+# open is ALSO a public reveal, so the pinned multiset (not the flag) is the
+# load-bearing defense.
 
+EXP = DI.EXPECTED_SUBTAPES  # ("EQZ(3)_63", "EQZ(81)_63", "LTZ(36)_64")
 GOOD_MASKED = {"0": PRIV_ASM,
                "EQZ(3)_63-1": "vasm_open 3, 3, False, c0, s0",
-               "LTZ(36)_64-2": "vasm_open 3, 3, False, c1, s1"}
+               "EQZ(81)_63-2": "vasm_open 81, 3, False, c1, s1",
+               "LTZ(36)_64-3": "vasm_open 36, 3, False, c2, s2"}
 
 
 def test_manifest_accepts_private_with_masked_subtapes():
-    ok, reasons = DI.is_private_manifest(GOOD_MASKED)
+    ok, reasons = DI.is_private_manifest(GOOD_MASKED, EXP)
     assert ok and reasons == []
 
 
 def test_manifest_rejects_name_spoof_tape():
-    # non-digit name spoof: EQZ(spoof) with wrong-player privateoutput + file sink
     m = dict(GOOD_MASKED)
     m["EQZ(spoof)-1"] = "privateoutput 4, 1, 0, c0, s0\nintoutput 0, ci0"
-    ok, reasons = DI.is_private_manifest(m)
+    ok, reasons = DI.is_private_manifest(m, EXP)
     assert not ok
     assert any("author-introduced" in r for r in reasons)
     assert any("privateoutput in non-main" in r for r in reasons)
 
 
 def test_manifest_rejects_digit_named_content_leak():
-    # NAME matches the strict masked pattern, but CONTENT leaks -> still rejected
     m = dict(GOOD_MASKED)
     m["EQZ(9)_99-1"] = "privateoutput 4, 1, 0, c0, s0\nintoutput 0, ci0"
-    ok, reasons = DI.is_private_manifest(m)
+    ok, reasons = DI.is_private_manifest(m, EXP)
     assert not ok
     assert any("privateoutput in non-main" in r for r in reasons)
     assert any("output/exfil" in r for r in reasons)
 
 
-def test_manifest_rejects_public_open_anywhere():
+def test_manifest_rejects_true_open_anywhere():
     m = dict(GOOD_MASKED)
-    m["EQZ(3)_63-1"] = "asm_open 3, True, c0, s0"     # public reveal (True) in a masked tape
-    ok, reasons = DI.is_private_manifest(m)
+    m["EQZ(3)_63-1"] = "asm_open 3, True, c0, s0"     # public reveal (True flag)
+    ok, reasons = DI.is_private_manifest(m, EXP)
     assert not ok
     assert any("public open-to-all" in r for r in reasons)
 
 
+def test_manifest_rejects_false_open_via_duplicate_subtape():
+    # re-review-4: reveal(False) -> asm_open ..., False (a public reveal). Placed
+    # in a spoofed EQZ(3)_63 tape it duplicates that base; the pinned multiset,
+    # not the open flag, is what rejects it.
+    m = dict(GOOD_MASKED)
+    m["EQZ(3)_63-9"] = "asm_open 3, False, c0, s0"    # duplicate EQZ(3)_63 base
+    ok, reasons = DI.is_private_manifest(m, EXP)
+    assert not ok
+    assert any("multiset" in r for r in reasons)
+
+
+def test_manifest_rejects_missing_subtape():
+    m = {k: v for k, v in GOOD_MASKED.items() if not k.startswith("LTZ")}
+    ok, reasons = DI.is_private_manifest(m, EXP)
+    assert not ok
+    assert any("multiset" in r for r in reasons)
+
+
 def test_manifest_rejects_main_tape_sink():
-    m = {"0": PRIV_ASM + "\nintoutput 0, ci0",
-         "EQZ(3)_63-1": "vasm_open 3, 3, False, c0, s0"}
-    ok, reasons = DI.is_private_manifest(m)
+    m = dict(GOOD_MASKED)
+    m["0"] = PRIV_ASM + "\nintoutput 0, ci0"
+    ok, reasons = DI.is_private_manifest(m, EXP)
     assert not ok
     assert any("non-delivery output" in r for r in reasons)
 
 
 def test_manifest_rejects_wrong_main_players():
     m = {"0": "privateoutput 8, 1, 0, c1, s1, 1, 0, c2, s2 # x"}
-    ok, reasons = DI.is_private_manifest(m)
+    ok, reasons = DI.is_private_manifest(m)      # no multiset arg: isolate players
     assert not ok
     assert any("players" in r for r in reasons)
 
