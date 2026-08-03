@@ -445,9 +445,11 @@ column.
   taxonomy against a source-controlling author** (a threat model the CT literature
   does not adopt — it assumes an honest developer and asks about timing). This is a
   real, publishable *domain instantiation + specific finding*, but it must be
-  framed as such, not as a new principle. `[OPEN]` whether the specific
-  MPC/`call_arg` unsoundness has been stated before in a crypto venue not reached
-  by our search (§ residual gaps).
+  framed as such, not as a new principle. **Track B (§12) tested this
+  specific-finding novelty with a bounded, documented search: no exact prior
+  result found; closest prior is Skalka & Near (the positive dual — narrow C3 to
+  cite/distinguish it); NOT duplicated; residual novelty claimed only "to the best
+  of a bounded search."**
 - **C4 hand-off — `incremental` (framing).** The two target properties are exactly
   what the formal-MPC literature provides (Wys★ / Verified SFE stack / EasyUC /
   Haagh / Butler). Articulating the hand-off from a conformance artifact to them is
@@ -486,7 +488,11 @@ column.
    / conformance framing; MASC/Ami (S&P 2022) + Alalfi (STVR 2022) for negative
    controls; Reproducible Builds (2022) + in-toto (2019)/SLSA for evidence.
    The manuscript's Related Work `[OPEN]` placeholders should be resolved with
-   these.
+   these. **Also (Track B, §12): cite and distinguish Skalka & Near (PPDP 2024 /
+   FASE 2025) as the closest MPC-specific *positive dual* to C3; cite the MP-SPDZ
+   documentation for the `call_tape`/`call_arg` (0xec/0xed) mechanism; and cite
+   Keller (CCS 2020) for the "single instruction for opening" fact behind premise
+   (a).**
 2. **Contribution C3 (reword — do not delete).** Reframe from "static opcode-level
    inspection is unsound" to "**the first concrete demonstration, in the
    MPC-application delivery-certification setting, that** opcode-level inspection is
@@ -518,15 +524,21 @@ column.
 
 ## 11. `[OPEN]` items and residual search gaps
 
-- **[OPEN] Negation coverage.** IACR ePrint and Google/Semantic Scholar were not
-  directly fetchable, so the claim "no prior work states the specific
-  MPC/`call_arg` opcode-ambiguity unsoundness" is **not fully verified**. A
-  targeted ePrint + Scholar sweep ("MP-SPDZ leakage static", "secure computation
-  compiler information flow bytecode", "reveal opcode masked open MPC") is required
-  before C3's specific-finding novelty is asserted un-hedged.
-- **[OPEN] MP-SPDZ-specific tooling.** No verified source surfaced a published
-  static leakage checker specific to MP-SPDZ tapes; absence here is *not* proof of
-  absence. Check the MP-SPDZ papers/repo and any follow-ups.
+- **[RESOLVED via Track B, §12] Negation coverage.** A bounded, documented
+  targeted search (§12) across DBLP, ACM/Springer/IEEE DOI pages, arXiv/ar5iv,
+  IACR ePrint listings, author/institutional PDFs, conference programs, and
+  MP-SPDZ docs/GitHub found **no exact prior result**; the closest prior is
+  **Skalka & Near** (positive dual → narrow C3), and the finding is **not
+  duplicated**. Residual non-exhaustiveness remains (IACR ePrint full-text and
+  DBLP search were not fetchable; the confused-deputy/weird-machines and
+  non-English literatures were not exhausted), so the manuscript must claim
+  novelty *"to the best of a documented, bounded search,"* not absolutely.
+- **[RESOLVED via Track B, §12] MP-SPDZ-specific tooling.** The only
+  MP-SPDZ-specific analysis found is functional-correctness fuzzing (BabelFuzz
+  FSE'26; Metamorphic Testing FSE/PACMSE'24) and an LLVM optimization pipeline
+  whose sole static check is control-flow secrecy — none certifies per-recipient
+  non-leakage. Keller (CCS 2020) corroborates premise (a) ("single instruction for
+  opening"). Absence of a leakage checker is bounded, not proof of absence.
 - **[OPEN] Publisher-page confirmations.** Entries tagged *[pub-page blocked]*
   (Jasmin CCS'17; Verified SFE Stack CCS'17; Kerschbaum ASIACCS'13; Binsec/Rel;
   System-level NI CCS'14; Securify; Hamlet TSE'77; Sigstore CCS'22; Reproducible
@@ -541,6 +553,127 @@ column.
 - **[OPEN] Deliberately excluded but real** (add if breadth wanted): FaCT (PLDI
   2019), Constant-Time Foundations for the New Spectre Era (PLDI 2020), Oyente (CCS
   2016).
+
+---
+
+## 12. Track B — targeted search to close the C3 residual negation
+
+**Goal.** Test whether the *specific* MPC finding of C3 has prior art: that a
+static, opcode-level check of compiled MP-SPDZ bytecode cannot soundly certify
+per-recipient non-leakage against a **source-controlling author**, because (a) a
+masked comparison-open and a raw secret-reveal are the same opcode
+(`asm_open`/`vasm_open`), and (b) a secret can be routed into a comparison
+subtape's open via the `call_tape`/`call_arg` register channel the honest code
+uses. (The *general* "leakage is dataflow, not opcode identity" principle is
+already credited to ct-verif / Binsec-Rel / Securify; Track B targets the
+MPC-specific result only.)
+
+**Date:** 2026-08-03. **Inclusion criteria:** as §2, plus topical proximity to the
+six sub-areas; every inspected close candidate recorded, including rejected ones.
+**Databases/sources queried:** web search; arXiv/ar5iv; ACM DL & Springer DOI
+pages; IEEE Xplore; USENIX; IACR ePrint listing pages; DBLP records; author &
+institutional PDFs (UMD, Cornell, UMinho, ShanghaiTech, UVM); official conference
+programs (S&P, ETAPS); MP-SPDZ readthedocs + GitHub. Two independent searches
+(sub-areas 1–3 and 4–6) were run and converged.
+**Coverage caveat (auditable bound):** IACR ePrint full text, ACM DL, DBLP search,
+and some IEEE/Wiley/HKUST pages bot-blocked the fetcher; those were confirmed via
+alternate authoritative records (arXiv, Springer, official programs, author PDFs,
+readthedocs). Representative queries logged (each 2026-08-03): "MP-SPDZ bytecode
+static analysis leakage verification"; "verify MPC reveal output only intended
+recipient reveal_to"; "information flow analysis MPC compiler secret reveal taint";
+"malicious/untrusted MPC program author certifying compiler leakage"; "MP-SPDZ
+call_tape call_arg function tape register arguments"; "confused-deputy declassify
+laundering secret through argument"; "source-controlling author threat model MPC".
+Search-engine silence was **not** treated as proof of absence.
+
+### Six sub-areas & verdicts
+
+| Sub-area | Conclusion |
+|---|---|
+| 1 MP-SPDZ bytecode / compiler security | `verified with bounded search` — only functional-correctness fuzzing exists; no leakage certifier; Keller 2020 corroborates the shared open opcode. |
+| 2 private-output recipient & value semantics | `verified with bounded search` — Wys★ / Viaduct closest, but positive, source-level, honest-author. |
+| 3 MPC compiler dataflow / IFC verification | `closest prior work found — narrow C3` → **Skalka & Near** (positive dual). |
+| 4 secret routing through tape/function arguments | `no exact prior result found, novelty non-exhaustive` — closest is general robust-declassification / nonmalleable-IFC. |
+| 5 `call_tape` / `call_arg` cross-tape channel | mechanism `verified` (MP-SPDZ docs, citable); its *security analysis* `no exact prior result found, non-exhaustive`. |
+| 6 source-controlling-author threat model | `no exact prior result found, novelty non-exhaustive` — literature uniformly assumes benign author + malicious party. |
+
+### Close candidates inspected (verified; incl. rejected)
+
+1. **Skalka & Near — "Language-Based Security for Low-Level MPC" (PPDP 2024)**
+   [https://arxiv.org/abs/2407.16504 ; ACM DOI 10.1145/3678232.3678246] and
+   **"SMT-Boosted Security Types for Low-Level MPC" (FASE/ETAPS 2025)**
+   [https://arxiv.org/abs/2501.17824 ; Springer 10.1007/978-3-031-91121-7_11;
+   ETAPS'25 programme]. A **sound static security-type system** for the authors'
+   own low-level MPC IR (*Overture/Prelude*): proves "information is released only
+   through explicit declassifications" (conditional non-interference, gradual
+   release, robust declassification). **The positive dual of C3 and the single
+   closest prior work.** Not a duplicate: (i) it is sound precisely because Overture
+   makes declassification a *syntactically distinct* construct — the property
+   MP-SPDZ bytecode lacks (shared open opcode); (ii) its adversary is a **corrupt
+   party**, explicitly *not* a malicious author; (iii) it targets its own IR, not
+   compiled MP-SPDZ tapes, and treats neither the `call_arg` cross-tape channel nor
+   the masked-open ≡ raw-reveal ambiguity. **→ C3 must cite and distinguish it.**
+2. **Wys★ (Rastogi, Swamy, Hicks, 2019; see A2)** — sealed types enforce that
+   `reveal` respects the intended party; closest on "right value → right
+   recipient," but positive, source-DSL, honest-author over GMW; not bytecode.
+3. **Viaduct (Acay et al., PLDI 2021)** [https://eprint.iacr.org/2021/468.pdf ;
+   TR https://www.cs.cornell.edu/andru/papers/viaduct-formal/viaduct-formal-tr.pdf]
+   — IFC-label-driven compiler placing outputs on hosts with sufficient authority;
+   author *declares* the policy; crypto idealized. Adjacent; honest author.
+4. **Almeida et al. — "A Formal Treatment of the Role of Verified Compilers in
+   Secure Computation" (JLAMP 2022)**
+   [https://repositorium.uminho.pt/entities/publication/19c690b4-ce83-4f32-a91e-1d2a9a24fe4f/full]
+   — verified compilation from a *trusted* spec; assumes a benign author (opposite
+   model). Rejected as prior.
+5. **PoS4MPC — Automated Security Policy Synthesis for MPC (CAV 2022)**
+   [https://faculty.sist.shanghaitech.edu.cn/faculty/songfu/publications/CAV22full.pdf]
+   — synthesizes which variables can be public; benign-author, on C/LLVM IR; does
+   not model secrets through arguments. Adjacent/rejected.
+6. **Robust declassification (Zdancewic & Myers, CSFW 2001)**
+   [https://www.cis.upenn.edu/~stevez/papers/ZM01b.pdf] **/ Nonmalleable IFC
+   (Cecchetti, Myers, Arden, CCS 2017)** [https://arxiv.org/pdf/1708.08596] —
+   closest *conceptual* prior for "a legitimate declassification channel cannot
+   simply be forbidden," but general IFC, not MPC/bytecode/`call_arg`; attacker
+   controls only low-integrity fragments, not the whole source.
+7. **BabelFuzz — Cost-Effective Testing of MPC Compilers (FSE 2026)**
+   [https://mariachris.github.io/Pubs/FSE-2026-MPC.pdf] **/ Metamorphic Testing of
+   MPC Compilers (PACMSE/FSE 2024)** [https://dl.acm.org/doi/full/10.1145/3643781]
+   — MP-SPDZ-specific, but target *miscompilation*, not leakage. Adjacent.
+8. **LLVM-based optimization pipeline for SPDZ (arXiv 2512.11112)**
+   [https://arxiv.org/html/2512.11112] — the one work touching SPDZ bytecode
+   statically; its static check is *control-flow secrecy*, not per-recipient
+   non-leakage. Adjacent.
+9. **ObliCheck (USENIX Security 2021)**
+   [https://www.usenix.org/conference/usenixsecurity21/presentation/son] — verifies
+   access-pattern obliviousness, a different channel. Adjacent.
+
+### Mechanism primary source (confirmed 2026-08-03)
+
+MP-SPDZ's own documentation defines the channel the finding relies on: **`call_tape`
+(opcode `0xec`)** — "Start tape/bytecode file in same thread. Arguments/return
+values … optional" — and **`call_arg` (opcode `0xed`)** — "Pseudo instruction for
+arguments in connection with `call_tape`"
+[https://mp-spdz.readthedocs.io/en/stable/instructions.html]; plus the `@function`
+/ `function_tape` / `FunctionCallTape.on_call()` compiler API that emits them
+[https://mp-spdz.readthedocs.io/en/latest/_modules/Compiler/library.html]. The
+MP-SPDZ paper (Keller, CCS 2020) does **not** name these opcodes but corroborates
+premise (a) — "a single instruction for opening"
+[https://eprint.iacr.org/2020/521.pdf]. **→ cite the docs for `call_tape`/`call_arg`;
+cite Keller 2020 for the single-open-instruction fact.**
+
+### Residual-negation verdict
+
+**No exact prior result found for C3's specific finding, with a bounded and
+documented search; closest prior work found (Skalka & Near) — narrow C3 to cite
+and distinguish it; NOT duplicated.** Two independent searches converged: no
+primary source states the negative/boundary result for MP-SPDZ tapes, the
+`asm_open` masked-open ≡ raw-reveal conflation, or the `call_tape`/`call_arg`
+routing as a leakage channel against a static check; every MPC-specific result
+runs the *opposite* direction (build a clean language/type system where a static
+check is sound), which *supports* our novelty. **Non-exhaustiveness stands** (IACR
+ePrint full text and DBLP search not fetchable; confused-deputy / non-English
+venues not exhausted) — so the manuscript claims novelty *"to the best of a
+documented, bounded search,"* never absolutely.
 
 ---
 
