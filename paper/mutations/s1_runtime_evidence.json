@@ -1,0 +1,83 @@
+{
+  "case": {
+    "secrets": [
+      0,
+      0,
+      0
+    ],
+    "query": "p1_is_max"
+  },
+  "backend": "9d809599ea6ce627216a389ca7d984fbb75d0cb9",
+  "compile_command": "./compile.py -R 64 threshold_smc_wrongsem p1_is_max",
+  "source": "paper/mutations/threshold_smc_wrongsem.mpc",
+  "source_sha256": "8482ce575f8b74b0a6743c5c3e7543cdc12a88960707f950f4d367cb4a823b08",
+  "oracle_expected": {
+    "accept": [
+      0,
+      0,
+      0
+    ],
+    "payload": [
+      0,
+      0,
+      0
+    ]
+  },
+  "delivered_per_party": {
+    "0": {
+      "ACCEPT": 0,
+      "PAYLOAD": 1
+    },
+    "1": {
+      "ACCEPT": 0,
+      "PAYLOAD": 1
+    },
+    "2": {
+      "ACCEPT": 0,
+      "PAYLOAD": 1
+    }
+  },
+  "return_codes": {
+    "0": 0,
+    "1": 0,
+    "2": 0
+  },
+  "raw_stdout_per_party": {
+    "0": "PRIV 0 ACCEPT 0\nPRIV 0 PAYLOAD 1\n",
+    "1": "PRIV 1 ACCEPT 0\nPRIV 1 PAYLOAD 1\n",
+    "2": "PRIV 2 ACCEPT 0\nPRIV 2 PAYLOAD 1\n"
+  },
+  "oracle_mismatch": {
+    "0": {
+      "oracle": {
+        "ACCEPT": 0,
+        "PAYLOAD": 0
+      },
+      "delivered": {
+        "ACCEPT": 0,
+        "PAYLOAD": 1
+      }
+    },
+    "1": {
+      "oracle": {
+        "ACCEPT": 0,
+        "PAYLOAD": 0
+      },
+      "delivered": {
+        "ACCEPT": 0,
+        "PAYLOAD": 1
+      }
+    },
+    "2": {
+      "oracle": {
+        "ACCEPT": 0,
+        "PAYLOAD": 0
+      },
+      "delivered": {
+        "ACCEPT": 0,
+        "PAYLOAD": 1
+      }
+    }
+  },
+  "verdict": "PASS delivery-linter (see detection_matrix) / FAIL oracle: executed run delivers PAYLOAD to rejected recipients that the oracle masks to 0"
+}
