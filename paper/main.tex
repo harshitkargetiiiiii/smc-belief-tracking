@@ -56,8 +56,8 @@ checks are a separately implemented plaintext \emph{pseudo-oracle} derived from 
 same paper, an anti-echo interface that keeps expected outputs out of the circuit,
 a strict runtime transcript check, and recomputed, hash-bound evidence. On the
 tested inputs these provide useful, coverage-bounded assurance; we are careful to
-state each guarantee operationally rather than as formal soundness. We then run an
-\emph{adaptive, retrospectively discovered} mutation sequence against a static
+state each guarantee operationally rather than as formal soundness. We then apply
+an \emph{adaptive, retrospectively discovered} mutation sequence to a static
 delivery linter under a precisely bounded build-time adversary that controls the
 application source but not the oracle, checker, policy, CI workflow, evidence
 validator, or pinned compiler. The sequence exposes the limit of the studied
@@ -336,7 +336,7 @@ one-to-one to every row. \textbf{B4 is a synthetic compiled-manifest counterexam
 We scope B6 precisely, because it is easy to overstate. We reconstructed a mutation
 that routes party~1's verdict through the \calltape/\callarg{} register channel (a
 \code{@function\_tape} that receives the verdict as a register argument and opens it).
-Compiled against the pinned backend and run through the final linter, this mutation
+Compiled against the pinned backend and checked by the final linter, this mutation
 is \textbf{REJECTED}: the added tape breaks the pinned comparison-subtape multiset,
 and MP-SPDZ's call frame also spills through memory, tripping the memory rules. So
 \textbf{B6 is not a demonstrated bypass of the final linter.}
@@ -372,6 +372,10 @@ at the pinned backend}: all three parties complete (return code $0$) and each
 delivers \code{ACCEPT 0 / PAYLOAD 1}, an executed oracle mismatch at parties
 $[0,1,2]$ (raw per-party stdout, oracle-vs-delivered verdicts, source hash, and
 compile command archived in \code{paper/mutations/s1\_runtime\_evidence.json}).
+This run is a \emph{functional} check only: it exercises the delivery semantics
+against the pseudo-oracle on one host and makes no runtime, channel-security, or
+performance claim, and says nothing about the runtime Rep3 adversary (the
+single-host harness is not adversarially isolated; \S\ref{sec:threats}).
 Delivery-linting checks \emph{how} values are delivered, not \emph{which}; only the
 functional pseudo-oracle, bounded by test coverage, constrains that.
 
