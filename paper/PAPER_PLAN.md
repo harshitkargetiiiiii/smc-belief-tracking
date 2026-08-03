@@ -1,5 +1,52 @@
 # PAPER_PLAN.md
 
+> ## ⚠️ SUPERSEDED — read `paper/main.tex` instead
+>
+> This planning document predates the consolidated manuscript and its Codex
+> re-reviews. It is retained for provenance only; the **authoritative artifact is
+> `paper/main.tex`** (branch `paper/first-draft`), with `paper/LITERATURE_REVIEW.md`
+> and `paper/mutations/`. The following parts of this plan are **superseded** and must
+> not be cited as current:
+> - **RQ4** (review-outperforms-single-pass) — **removed**; the review loop is now an
+>   *experience lesson*, not a contribution (no comparator).
+> - **Conjecture 1** (dataflow-free impossibility) — **removed** from the paper (a
+>   one-line future-work note only).
+> - **"Independent oracle"** — replaced by *separately-implemented pseudo-oracle* with
+>   a stated correlated-error limitation.
+> - **Broad static-analysis claims** ("cannot be made sound"; "a sound checker needs
+>   operand-sensitive dataflow") — **narrowed** to: *the studied opcode-identity /
+>   channel-blocklist linter cannot be promoted to a general non-leakage checker;
+>   `call_tape`/`call_arg` cannot be blocklisted because the honest build uses that
+>   channel; distinguishing legitimate from leaking flows requires analysis stronger
+>   than opcode/channel identity (operand/provenance dataflow, typing, verified IR),
+>   which we did not evaluate.*
+> - **Novelty** is **incremental** (case study / experience report), per
+>   `LITERATURE_REVIEW.md`; not a new technique.
+>
+> **Current thesis (authoritative).** On one MP-SPDZ application, separately
+> implemented functional pseudo-oracles, anti-echo interfaces, transcript checks, and
+> recomputed evidence provide useful coverage-bounded assurance; an adaptive mutation
+> sequence exposes the limit of the studied opcode-identity delivery linter, including
+> the MP-SPDZ `call_tape`/`call_arg` path, under a precisely bounded build-time
+> adversary (controls the `.mpc` source only; oracle/checker/policy/CI/validator/
+> pinned compiler trusted).
+>
+> **Current contributions.** (1) application of established conformance / pseudo-oracle
+> practice to an MPC application (anti-echo + recomputed evidence as the delta); (2) a
+> reproducible case-study artifact (fixture + bounded 228-case matrix + five committed
+> controls, pinned backend); (3) a reproducible adversarial mutation study (B0; B1–B6
+> compiled-delivery cases — B1/B2/B3/B5 committed source, **B4 synthetic manifest**,
+> B6 reconstructed & caught; **S1 semantic, executed end-to-end**) with a
+> machine-readable detection matrix; (4) the assurance-boundary / hand-off statement.
+>
+> **Current RQs.** RQ1 — what the checks establish on the tested matrix vs what
+> remains unestablished. RQ2 — through which specific compiled channels the studied
+> opcode-identity linter fails for this MPC application, and at what exact strength.
+> RQ3 — the boundary between implementation-level evidence and a protocol-level proof
+> (grounded in the two-adversary / TCB split). *(RQ4 removed.)*
+>
+> The 11 sections below are the original plan, kept for history.
+
 **Working title:** *Executable Conformance for a Secure-Multiparty Application:
 What Implementation-Level Evidence Can Certify, and Where It Stops Short of a
 Privacy Proof*

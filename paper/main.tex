@@ -60,11 +60,15 @@ state each guarantee operationally rather than as formal soundness. We then run 
 \emph{adaptive, retrospectively discovered} mutation sequence against a static
 delivery linter under a precisely bounded build-time adversary that controls the
 application source but not the oracle, checker, policy, CI workflow, evidence
-validator, or pinned compiler. The sequence exposes where opcode-level delivery
-linting fails: a masked comparison-open and a raw secret-reveal are the same
-opcode, and the MP-SPDZ \calltape/\callarg{} register channel that a leak could use
-is the same channel the honest comparison subtapes use, so it cannot be closed by
-an opcode/channel blocklist without rejecting the honest build. We do not claim
+validator, or pinned compiler. The sequence exposes the limit of the studied
+linter: a masked comparison-open and a raw secret-reveal are the same opcode, and
+the MP-SPDZ \calltape/\callarg{} register channel that a leak could use is the same
+channel the honest comparison subtapes use, so it cannot be blocklisted without
+rejecting the honest build. We conclude only that \emph{this opcode-identity /
+channel-blocklist linter cannot be promoted to a general non-leakage checker};
+distinguishing legitimate from leaking flows needs analysis stronger than
+opcode/channel identity (operand/provenance-sensitive dataflow, typing, or a
+verified IR), which we did not evaluate. We do not claim
 this principle is new --- that leakage is a dataflow rather than opcode-identity
 property is established for constant-time and smart-contract bytecode analysis; our
 contribution is the MPC-application instantiation, the pinned-backend mechanism, and
@@ -99,8 +103,8 @@ reproducible mutation study, and the honest accounting of the assurance boundary
 \paragraph{A narrowed thesis.} On one MP-SPDZ application, separately implemented
 functional pseudo-oracles, anti-echo interfaces, transcript checks, and recomputed
 evidence provide useful coverage-bounded assurance; an adaptive mutation sequence
-exposes where opcode-identity delivery linting fails, including the MP-SPDZ
-\calltape/\callarg{} path, under a precisely bounded build-time adversary.
+exposes the limit of the studied opcode-identity delivery linter, including the
+MP-SPDZ \calltape/\callarg{} path, under a precisely bounded build-time adversary.
 
 \paragraph{Contributions.}
 \begin{enumerate}[leftmargin=1.4em,itemsep=2pt]
@@ -112,9 +116,9 @@ fragment of \thsmc{} (\S\ref{sec:results}): a fixture and a bounded 228-case
 adversarial matrix checked against the pseudo-oracle, and five committed executable
 negative controls, against a pinned backend.
 \item A \textbf{reproducible adversarial mutation study} (\S\ref{sec:mutation}):
-one motivating transcript failure, six compiled-delivery mutations, and one semantic
-mutation, with an archived corpus and a machine-readable detection matrix, showing
-where opcode-level linting fails and \emph{at what exact strength}.
+one motivating transcript failure, six compiled-delivery mutation cases, and one
+semantic mutation, with an archived corpus and a machine-readable detection matrix,
+showing the limit of the studied linter \emph{at its exact strength}.
 \item A statement of the \textbf{assurance boundary and hand-off}
 (\S\ref{sec:boundary}): the operational property the checks demonstrate, and the two
 protocol-level properties a real non-leakage guarantee would additionally need.
@@ -280,16 +284,25 @@ mutations later used as evidence (adaptive overfitting), and there are no held-o
 mutations from which to estimate detector effectiveness (\S\ref{sec:threats}).
 
 \paragraph{Accounting.} One motivating transcript failure (\textbf{B0}); six
-compiled-delivery mutations (\textbf{B1--B6}); one semantic mutation (\textbf{S1}).
-B0: changing \code{reveal\_to(j)} to a public \code{reveal()} while keeping the
-per-party print compiles to a public open of every verdict, yet a stdout-only
-checker reported success~\repo{R-41}. That motivated inspecting the \emph{compiled}
-delivery. B1--B5 then each defeated the then-current linter and were closed by
-adding a rule (separate-tape reveal; name-spoofed subtape; \code{reveal(False)} ---
-still a public open; the same injected into an existing subtape body via scalar
-memory; and via vectorized memory)~\repo{review-log R-42..R-46}. The clean build
-stores nothing in its main tape and touches no memory in its subtapes, so forbidding
-memory is a restriction with no false positives on the honest build.
+compiled-delivery mutation cases (\textbf{B1--B6}); one semantic mutation
+(\textbf{S1}). The six are not homogeneous: B1, B2, B3 and B5 are committed
+executable source controls; \textbf{B4 is a synthetic compiled-manifest
+counterexample, not a source \code{.mpc}}; and B6 is a reconstructed source mutation
+whose naive realization is itself caught (\S\ref{sec:b6}). B0: changing
+\code{reveal\_to(j)} to a public \code{reveal()} while keeping the per-party print
+compiles to a public open of every verdict, yet a stdout-only checker reported
+success~\repo{R-41}; that motivated inspecting the \emph{compiled} delivery. B1--B3
+and B5 then each defeated the then-current linter \emph{as committed source builds}
+and were closed by adding a rule (separate-tape reveal; name-spoofed subtape;
+\code{reveal(False)} --- still a public open; and the vectorized-memory variant).
+\textbf{B4} is different: it is the rr-5 observation that the multiset rule is blind
+to tape \emph{bodies} --- a \code{reveal(False)} of the verdict placed in an
+\emph{existing} \code{EQZ(3)\_63} body with the three pinned names intact. R-45
+demonstrated this with a \emph{synthetic manifest}, not a compiled source mutation;
+against the final linter it is rejected by the subtape-memory rule (the multiset is
+left intact), which is why those rules were added~\repo{review-log R-42..R-45}. The
+clean build stores nothing in its main tape and touches no memory in its subtapes, so
+forbidding memory is a restriction with no false positives on the honest build.
 
 \begin{table*}[t]
 \centering\footnotesize\renewcommand{\arraystretch}{1.25}
@@ -301,7 +314,7 @@ B0 & \code{leaky} & public \code{reveal()} in main & REJECTED & motivating stdou
 B1 & \code{subleak} & separate \code{@function\_tape} reveal+print & REJECTED & closed by whole-manifest inspection \\
 B2 & \code{namespoof} & name-spoofed subtape: wrong-player delivery + file sink & REJECTED & closed by content rules \\
 B3 & \code{openfalse} & \code{reveal(False)} in spoofed \code{EQZ(3)\_63}, scalar mem & REJECTED & \code{False} open is still public \\
-B4 & \code{openfalse}$^\dagger$ & same in an \emph{existing} subtape body, scalar mem & REJECTED & \textbf{shares B3's control} \\
+B4 & \emph{synthetic} & \code{reveal(False)} in an \emph{existing} \code{EQZ(3)\_63} body, multiset intact & REJECTED (rule h) & synthetic manifest (R-45); \textbf{not a source \code{.mpc}} \\
 B5 & \code{openfalse\_vec} & same via vectorized \code{vstms}/\code{vldms} & REJECTED & closed by broadened regex \\
 B6 & \emph{reconstructed} & verdict via \calltape/\callarg{} register args & REJECTED (naive) & see \S\ref{sec:b6}; not a bypass of the final linter \\
 S1 & \emph{reconstructed} & correct delivery, reject-mask dropped & PASS linter / \textbf{FAIL oracle} & semantic; linter is semantics-blind \\
@@ -309,9 +322,11 @@ S1 & \emph{reconstructed} & correct delivery, reject-mask dropped & PASS linter 
 \end{tabularx}
 \caption{Detection matrix (machine-readable form: \code{paper/mutations/detection\_matrix.json};
 outcomes recomputed against \code{delivery\_inspect.py}@\code{305a3a8}, MP-SPDZ
-\code{9d809599}). The five committed controls do \emph{not} map one-to-one to rows:
-$\dagger$B3 and B4 share \code{threshold\_smc\_openfalse.mpc}; B6 and S1 are
-reconstructed under \code{paper/mutations/}, not committed to the frozen artifact.}
+\code{9d809599}). The five committed controls map to B0--B3 and B5
+(\code{leaky, subleak, namespoof, openfalse, openfalse\_vec}); they do \emph{not} map
+one-to-one to every row. \textbf{B4 is a synthetic compiled-manifest counterexample
+(R-45), not a source \code{.mpc}}; B6 and S1 are reconstructed source mutations under
+\code{paper/mutations/}. Not committed to the frozen artifact: B4, B6, S1.}
 \label{tab:matrix}
 \end{table*}
 
@@ -334,14 +349,16 @@ each of the three comparison subtapes --- no memory (reproducible;
 register-argument transfer of secrets, the way rules against memory close the memory
 channel, would \textbf{reject the honest build}. The \callarg{} channel
 \emph{cannot be closed by an opcode/channel blocklist} without rejecting the honest
-build. This is \emph{not} a claim that no stronger analysis can distinguish
-legitimate from illegitimate flows: an operand-sensitive type system, a verified IR,
-a dataflow analysis, or a policy-bound call-site analysis could. Combined with the
-opcode-identity fact (a masked open and a raw reveal are the same instruction), the
-lesson is that a blocklist over opcodes and channels is the wrong tool; a sound
-checker needs operand-sensitive dataflow (\S\ref{sec:related}). We deliberately do
-\emph{not} claim that memory and register arguments are the \emph{only} cross-tape
-channels; the demonstrated \callarg{} path is sufficient for this scoped conclusion.
+build. Combined with the opcode-identity fact (a masked open and a raw reveal are
+the same instruction), the lesson is precise: \textbf{the studied opcode-identity /
+channel-blocklist linter cannot be promoted to a general non-leakage checker.}
+\calltape/\callarg{} cannot simply be blocklisted, because the honest build uses that
+channel. Distinguishing legitimate from leaking flows requires analysis stronger than
+opcode/channel identity --- operand/provenance-sensitive dataflow, typing, a verified
+IR, or other semantic machinery --- \emph{which we did not evaluate}
+(\S\ref{sec:related}). We also do \emph{not} claim that memory and register arguments
+are the \emph{only} cross-tape channels; the demonstrated \callarg{} path is
+sufficient for this scoped conclusion.
 
 \subsection{S1: correct recipient, wrong value}
 \label{sec:s1}
@@ -350,9 +367,13 @@ even to rejected recipients) \textbf{passes} every delivery-linter rule --- the
 delivery structure is intact --- yet \textbf{fails} the pseudo-oracle: on
 $\text{secrets}=(0,0,0)$, \code{p1\_is\_max}, the true output is $1$ and all parties
 reject (oracle payload $0$), but S1 delivers $1$ to all three
-(\code{paper/mutations/threshold\_smc\_wrongsem.mpc}). Delivery-linting checks
-\emph{how} values are delivered, not \emph{which}; only the functional pseudo-oracle,
-bounded by test coverage, constrains that.
+(\code{paper/mutations/threshold\_smc\_wrongsem.mpc}). We ran this \textbf{end-to-end
+at the pinned backend}: all three parties complete (return code $0$) and each
+delivers \code{ACCEPT 0 / PAYLOAD 1}, an executed oracle mismatch at parties
+$[0,1,2]$ (raw per-party stdout, oracle-vs-delivered verdicts, source hash, and
+compile command archived in \code{paper/mutations/s1\_runtime\_evidence.json}).
+Delivery-linting checks \emph{how} values are delivered, not \emph{which}; only the
+functional pseudo-oracle, bounded by test coverage, constrains that.
 
 % ===========================================================================
 \section{The assurance boundary}
@@ -369,8 +390,9 @@ confidence, and such tooling should print its assurance boundary; ours does~\rep
 banner}.
 \item \textbf{Pinned-backend finding (backend/version specific):} MP-SPDZ's shared
 open instruction and the \calltape/\callarg{} path at \code{9d809599}, and the
-consequence that the delivery linter's blocklist strategy cannot be extended to
-soundness.
+consequence that the studied opcode-identity / channel-blocklist linter cannot be
+promoted to a general non-leakage checker (\calltape/\callarg{} cannot be
+blocklisted, since the honest build uses it).
 \end{enumerate}
 
 \paragraph{What would make it a real guarantee.} Two protocol-level properties,
@@ -490,12 +512,15 @@ toward an evaluated one.
 On one MP-SPDZ application, a separately implemented pseudo-oracle, an anti-echo
 interface, a strict transcript check, and recomputed evidence give real,
 coverage-bounded, operationally-stated assurance and catch a family of gross delivery
-mistakes --- and they have a sharp, nameable boundary. Opcode-level delivery linting
-cannot be made sound against a source-controlling author, because a masked open and a
-raw reveal are the same instruction and the register channel a leak would use is the
-one the honest code uses; a sound checker needs operand-sensitive dataflow, and a
-privacy guarantee needs a protocol-level proof. Naming that boundary --- and printing
-it next to the green check --- is the case study's point.
+mistakes --- and they have a sharp, nameable boundary. The studied opcode-identity /
+channel-blocklist linter cannot be promoted to a general non-leakage checker: a
+masked open and a raw reveal are the same instruction, and the register channel a
+leak would use is the one the honest code uses, so \calltape/\callarg{} cannot be
+blocklisted. Distinguishing the flows needs analysis stronger than opcode/channel
+identity (operand/provenance-sensitive dataflow, typing, or a verified IR) --- which
+we did not evaluate --- and a privacy guarantee needs a protocol-level proof. Naming
+that boundary --- and printing it next to the green check --- is the case study's
+point.
 
 % ===========================================================================
 \appendix
@@ -507,8 +532,10 @@ The archived corpus and machine-readable matrix are
 the mutation, the checker version defeated, source/patch, compile command, the
 \code{manifest\_signature} assembly hash, the linter/runtime/oracle outcome, the
 committed/reconstructed status, and the evidence location; and \code{README.md} with
-reproduction. B0--B5 reference the committed controls under \code{conformance/mpc/}
-(frozen at \code{305a3a8}).
+reproduction. B0--B3 and B5 reference the five committed controls under
+\code{conformance/mpc/} (frozen at \code{305a3a8}); B4 is a synthetic
+compiled-manifest counterexample (not committed); B6 and S1 are reconstructed source
+mutations under \code{paper/mutations/}.
 
 \begin{thebibliography}{99}\footnotesize
 \bibitem{plas2012} P.~Mardziel, M.~Hicks, J.~Katz, M.~Srivatsa. Knowledge-Oriented Secure Multiparty Computation. PLAS, 2012.
