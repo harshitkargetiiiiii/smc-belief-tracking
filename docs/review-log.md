@@ -818,3 +818,34 @@ open until someone with actual MPC expertise addresses them.
   Conformance suite UNCHANGED; Sigma_T NOT started. 92 conformance tests green
   (46 functional + 46 private-gate).
 - **Status:** `open` (awaiting gate-2 re-review)
+
+### R-47 — Gate 2 re-review-7: call_arg bypass + DECISION to scope layer 1 as a LINTER
+
+- **Date:** 2026-08-03
+- **Source:** ChatGPT/Codex, gate-2 re-review (7th), issue #5 comment `#5169666320`.
+- **Objection:** The `vstms`/`vldms` fix is correct, but the gate is still
+  bypassable through MP-SPDZ's `call_tape` / `call_arg` DIRECT register-transfer
+  path, which does not use memory. Rules (g)+(h) only cover the memory channel.
+- **Assessment:** Correct, and it invalidates the re-review-5 soundness PREMISE
+  ("memory is the only cross-tape channel"). Verified: the clean build's MAIN
+  invokes each comparison subtape with `call_tape` passing registers directly
+  (`call_tape 12, 3, ci0, ... s6(3), s0(3) ...`), and the subtapes receive their
+  operands via `call_arg` — NO memory. Because the honest comparison subtapes use
+  this exact channel, it cannot be forbidden.
+- **Resolution — a scoping DECISION, not another patch.** Six re-reviews have now
+  shown that a static, opcode-level gate cannot be made sound against a
+  source-controlling author: a masked comparison-open and a raw verdict-reveal are
+  the same opcode (dataflow-only distinction), and a verdict can be routed into a
+  subtape's open via memory OR `call_tape`/`call_arg` register args. The
+  compiled-delivery check is therefore SCOPED to a LINTER: it rejects five
+  committed negative controls and catches gross/accidental leaks and regressions,
+  but a PASS is explicitly NOT a non-leakage certificate. The fundamental-limit
+  finding + the full bypass sequence are written up in `docs/limits.md`;
+  `ADVERSARY.md` "NOT claimed" and the `delivery_inspect.py` / `private_run.py`
+  runtime banners state the LINTER scope. A real non-leakage guarantee is deferred
+  to a protocol-level Rep3 argument (human MPC specialist) or a formally-verified,
+  dataflow-checked comparison primitive. Layers 2-3 (strict runtime transcript +
+  typed recomputed SHA-bound evidence) remain sound for what they check.
+  Conformance suite UNCHANGED; 92 tests green; Sigma_T still NOT started.
+- **Status:** `resolved` (scope corrected; automated non-leakage certification is
+  out of scope by decision, not open as a bug)

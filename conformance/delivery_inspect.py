@@ -1,4 +1,16 @@
 """
+LINTER, NOT A SOUNDNESS PROOF (re-review-7 decision). This inspects compiled
+assembly for GROSS leak patterns and rejects five committed negative controls, but
+it does NOT and CANNOT certify non-leakage. A masked comparison-open and a raw
+verdict-reveal are the SAME opcode (`asm_open`, either flag), and a verdict can be
+routed into a subtape's open through sanctioned channels the honest code ALSO uses
+-- memory (store/load) AND `call_tape`/`call_arg` register arguments (Codex's
+call_arg finding, issue #5: the clean comparison subtapes receive their operands
+via `call_arg`, no memory, so that channel cannot be forbidden). A `PASS` here
+means "no known gross leak pattern found", NOT "provably private". Sound
+non-leakage needs the protocol-level human/formal review ADVERSARY.md mandates and
+is OUT OF SCOPE for this linter. See docs/limits.md.
+
 Compiled-delivery inspection by CONTENT + pinned multiset + memory channel (rr-5).
 
 Re-review-2 keyed the masked-subtape allowlist on the tape KIND string
@@ -276,5 +288,6 @@ if __name__ == "__main__":
         if d["private_reasons"]:
             print("   ", d["private_reasons"])
         all_ok = all_ok and ok
-    print("DELIVERY INSPECTION OK" if all_ok else "DELIVERY INSPECTION FAILED")
+    print("DELIVERY LINT OK (no gross leak pattern; NOT a non-leakage proof)"
+          if all_ok else "DELIVERY LINT FAILED")
     sys.exit(0 if all_ok else 1)

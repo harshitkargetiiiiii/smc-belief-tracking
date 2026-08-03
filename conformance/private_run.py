@@ -11,6 +11,10 @@ Private-delivery gate (staged gate 2, re-review). Three layers:
    command, source/delivery hashes, provenance, and encrypted-channel status.
 
 Functional demonstration only; NOT a simulation-security proof (ADVERSARY.md).
+Layer 1 is a LINTER (re-review-7): it rejects five committed gross-leak controls
+but cannot certify non-leakage (masked/raw opens are opcode-identical and a verdict
+can cross into a subtape via call_arg register args the honest code uses). A PASS
+means "no known gross leak pattern", not "provably private". See docs/limits.md.
 """
 import glob
 import hashlib
@@ -211,7 +215,8 @@ def main():
         ok_all = ok_all and ok
 
     print("=" * 56)
-    print("PRIVATE DELIVERY OK" if ok_all else "PRIVATE DELIVERY FAILED")
+    print("PRIVATE DELIVERY LINT OK (no gross leak pattern; NOT a non-leakage proof)"
+          if ok_all else "PRIVATE DELIVERY LINT FAILED")
     sys.exit(0 if ok_all else 1)
 
 

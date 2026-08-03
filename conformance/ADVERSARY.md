@@ -53,9 +53,15 @@ from those is not — and cannot be — prohibited. `payload_k = o_actual` if
 
 ## What is DEMONSTRATED (this gate) vs NOT claimed
 
+**The compiled-delivery check (layer 1) is a LINTER, not a soundness proof
+(re-review-7).** It rejects five committed negative controls and every gross /
+accidental leak pattern below, but a `PASS` does NOT certify non-leakage — see
+"NOT claimed" and `docs/limits.md`. Layers 2-3 (runtime transcript + evidence
+binding) are sound for what they check.
+
 Demonstrated, executably:
 
-1. **Compiled delivery inspected by CONTENT + a pinned tape multiset**
+1. **Compiled-delivery LINT by CONTENT + a pinned tape multiset**
    (`delivery_inspect.py`): re-review-2 keyed the masked-subtape allowlist on the
    tape-name substring; re-review-4 noted that `asm_open(..., False, ...)` is ALSO
    a public reveal (the `False` flag only skips the post-open correctness check,
@@ -107,6 +113,17 @@ Demonstrated, executably:
 
 NOT claimed:
 
+- **Sound non-leakage by static inspection.** Six adversarial re-reviews (issue
+  #5) established that the compiled-delivery linter CANNOT be made sound against a
+  source-controlling author: a masked comparison-open and a raw verdict-reveal are
+  the SAME opcode, and a verdict can be moved into a subtape's open through
+  sanctioned channels the honest code ALSO uses — memory AND `call_tape`/`call_arg`
+  register arguments. Closing channels by enumeration (subleak → namespoof →
+  openfalse → body-injection → vstms/vldms → call_arg) does not address the
+  underlying indistinguishability. The linter catches gross / accidental leaks and
+  regressions; a real non-leakage guarantee needs a protocol-level Rep3 argument
+  (human MPC specialist) or a formally-verified, dataflow-checked comparison
+  primitive. See `docs/limits.md`.
 - **Simulation-based security.** A functional + compiled-delivery check catches
   gross public opening and cleartext cross-party printing. It does NOT prove that
   a corrupted party's FULL view (shares, timing, network) is simulatable from its

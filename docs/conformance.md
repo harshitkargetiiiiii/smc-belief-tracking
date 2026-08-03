@@ -1,10 +1,16 @@
-# STATUS (2026-08-02, gate 2 re-review-6 fixes: private delivery)
+# STATUS (2026-08-03, gate 2 re-review-7: compiled-delivery scoped to a LINTER)
 
-Re-review-5 bound the MEMORY channel (a `reveal(False)` injected into an existing
-`EQZ(3)_63` slot can only reach it via a MAIN store → subtape load). Re-review-6:
-the memory regex matched only SCALAR `stm*`/`ldm*`, so the VECTORIZED `vstms` /
-`vldms` forms slipped it — now covered (`v?g?stm*` / `v?g?ldm*`). Sigma_T
-persistence remains UNAUTHORIZED. Conformance suite + evidence gate UNCHANGED.
+DECISION (re-review-7): the compiled-delivery check is scoped to a LINTER, not a
+non-leakage proof. Six adversarial re-reviews (issue #5) showed a static,
+opcode-level gate cannot be made sound against a source-controlling author — a
+masked comparison-open and a raw verdict-reveal are the same opcode, and a verdict
+can be routed into a subtape through channels the honest code uses (memory AND
+`call_tape`/`call_arg` register args). The finding is written up in
+`docs/limits.md`. The linter still rejects five committed negative controls and
+catches gross / accidental leaks; a real non-leakage guarantee is deferred to the
+protocol-level human review ADVERSARY.md mandates. Sigma_T persistence remains
+UNAUTHORIZED. Conformance suite + evidence gate UNCHANGED; layers 2-3 (runtime
+transcript + evidence binding) remain sound for what they check.
 
 Delivery inspection (`delivery_inspect.py`) binds on CONTENT, a pinned tape
 multiset, AND the memory channel, with NO reliance on the open flag:
