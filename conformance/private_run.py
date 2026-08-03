@@ -195,7 +195,8 @@ def main():
               f"leaky_rejected={d['leaky_rejected']} "
               f"subleak_rejected={d['subleak_rejected']} "
               f"namespoof_rejected={d['namespoof_rejected']} "
-              f"openfalse_rejected={d['openfalse_rejected']} -> {'PASS' if ok else 'FAIL'}")
+              f"openfalse_rejected={d['openfalse_rejected']} "
+              f"openfalse_vec_rejected={d['openfalse_vec_rejected']} -> {'PASS' if ok else 'FAIL'}")
         if not ok:
             print("   ", d.get("private_reasons"))
         ok_all = ok_all and ok

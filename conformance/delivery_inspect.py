@@ -47,8 +47,9 @@ A build is private-delivering iff ALL hold:
       cross-tape register reference is a compiler error, so the only way a verdict
       reaches a subtape's open is MAIN store -> subtape load. The clean build's
       MAIN never stores and its subtapes never touch memory, so both are forbidden.
-      `threshold_smc_openfalse.mpc` (a `reveal(False)` needing a MAIN store + a
-      subtape load) is the committed control.
+      `threshold_smc_openfalse.mpc` (scalar `stms`/`ldms`) and
+      `threshold_smc_openfalse_vec.mpc` (vectorized `vstms`/`vldms`, re-review-6)
+      are the committed controls.
 
 manifest_signature() now hashes the FULL normalized assembly of every tape, so an
 injected sink/tape/open changes it (the old 4-pattern hash collided).
@@ -82,8 +83,10 @@ _SINK = re.compile(
 # memory NOT AT ALL (verified), so forbidding a MAIN store and ANY subtape memory
 # access closes that channel -- catching a `reveal(False)` injected into an
 # expected subtape even when the tape multiset is left untouched (re-review-5).
-_MEMSTORE = re.compile(r"\b(g?stm[a-z]+)\b")     # stms/stmc/stmsi/stmci/stmint/gstm*
-_MEMLOAD = re.compile(r"\b(g?ldm[a-z]+)\b")       # ldms/ldmc/ldmsi/ldmci/ldmint/gldm*
+# The `v?` (VECTORIZED, e.g. vstms/vldms) and `g?` (GF2n) prefixes are BOTH
+# covered -- re-review-6 showed a scalar-only regex missed the vectorized forms.
+_MEMSTORE = re.compile(r"\bv?g?stm[a-z]*\b")     # stm*/gstm*/vstms/vgstm* (all store forms)
+_MEMLOAD = re.compile(r"\bv?g?ldm[a-z]*\b")       # ldm*/gldm*/vldms/vgldm* (all load forms)
 
 # The EXACT non-main tape multiset the computation must generate (both queries).
 # re-review-4: `asm_open(..., False, ...)` is ALSO a public reveal (the flag only
@@ -249,12 +252,14 @@ def gate(query):
         ("threshold_smc_subleak", "subleak_rejected", "asm_sub"),
         ("threshold_smc_namespoof", "namespoof_rejected", "asm_ns"),
         ("threshold_smc_openfalse", "openfalse_rejected", "asm_of"),
+        ("threshold_smc_openfalse_vec", "openfalse_vec_rejected", "asm_ofv"),
     ):
         m = compile_manifest(stem, query, pfx)
         detail[key] = not is_private_manifest(m, EXPECTED_SUBTAPES)[0]
 
     ok = (ok_priv and detail["leaky_rejected"] and detail["subleak_rejected"]
-          and detail["namespoof_rejected"] and detail["openfalse_rejected"])
+          and detail["namespoof_rejected"] and detail["openfalse_rejected"]
+          and detail["openfalse_vec_rejected"])
     return ok, detail
 
 
@@ -266,7 +271,8 @@ if __name__ == "__main__":
               f"leaky_rejected={d['leaky_rejected']} "
               f"subleak_rejected={d['subleak_rejected']} "
               f"namespoof_rejected={d['namespoof_rejected']} "
-              f"openfalse_rejected={d['openfalse_rejected']} -> {'PASS' if ok else 'FAIL'}")
+              f"openfalse_rejected={d['openfalse_rejected']} "
+              f"openfalse_vec_rejected={d['openfalse_vec_rejected']} -> {'PASS' if ok else 'FAIL'}")
         if d["private_reasons"]:
             print("   ", d["private_reasons"])
         all_ok = all_ok and ok

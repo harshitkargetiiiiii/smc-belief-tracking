@@ -1,9 +1,10 @@
-# STATUS (2026-08-02, gate 2 re-review-5 fixes: private delivery)
+# STATUS (2026-08-02, gate 2 re-review-6 fixes: private delivery)
 
-Re-review-5: pinning the tape multiset caught an added/duplicate open tape, but a
-`reveal(False)` injected INTO an existing expected `EQZ(3)_63` slot (multiset
-untouched) still leaked. Closed by binding the MEMORY channel. Sigma_T persistence
-remains UNAUTHORIZED. Conformance suite + evidence gate UNCHANGED.
+Re-review-5 bound the MEMORY channel (a `reveal(False)` injected into an existing
+`EQZ(3)_63` slot can only reach it via a MAIN store → subtape load). Re-review-6:
+the memory regex matched only SCALAR `stm*`/`ldm*`, so the VECTORIZED `vstms` /
+`vldms` forms slipped it — now covered (`v?g?stm*` / `v?g?ldm*`). Sigma_T
+persistence remains UNAUTHORIZED. Conformance suite + evidence gate UNCHANGED.
 
 Delivery inspection (`delivery_inspect.py`) binds on CONTENT, a pinned tape
 multiset, AND the memory channel, with NO reliance on the open flag:
@@ -17,10 +18,11 @@ multiset, AND the memory channel, with NO reliance on the open flag:
   compiler error, so the only channel by which it can reach a subtape's open is
   MAIN store → subtape load; the clean build uses neither. `manifest_signature`
   hashes the full assembly.
-- FOUR committed negative controls are rejected: `threshold_smc_leaky` (public
+- FIVE committed negative controls are rejected: `threshold_smc_leaky` (public
   reveal in main), `threshold_smc_subleak` (separate-tape reveal + print),
-  `threshold_smc_namespoof` (name-spoofed wrong-player delivery + file sink), and
-  `threshold_smc_openfalse` (a `reveal(False)` in a spoofed `EQZ(3)_63` subtape).
+  `threshold_smc_namespoof` (name-spoofed wrong-player delivery + file sink),
+  `threshold_smc_openfalse` (a `reveal(False)` via scalar `stms`/`ldms`), and
+  `threshold_smc_openfalse_vec` (the same via vectorized `vstms`/`vldms`).
 
 Evidence binding (re-review-3, still in force): `validate_evidence.py --recompute`
 binds each record to a canonical case (recomputed `input_hash` + oracle
@@ -28,7 +30,7 @@ binds each record to a canonical case (recomputed `input_hash` + oracle
 signature — rejecting replay, unbound `input_hash`, forged verdict values, and
 forged bound records. `compile_manifest` clears stale assembly before compiling.
 
-Tests: 90 in `conformance/` (46 functional conformance + 44 private-gate), all
+Tests: 92 in `conformance/` (46 functional conformance + 46 private-gate), all
 green; `reference/` suite unchanged. Functional + compiled-delivery only; NOT a
 simulation-security proof.
 

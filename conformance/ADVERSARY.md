@@ -73,13 +73,16 @@ Demonstrated, executably:
    subtape touches memory NOT AT ALL. The verdict is a MAIN register, and a
    cross-tape register reference is a compiler error, so the only channel by which
    a verdict can reach a subtape's open is MAIN store → subtape load; the clean
-   build uses neither, so both are forbidden.
-   `manifest_signature` hashes the FULL normalized assembly of every tape. FOUR
+   build uses neither, so both are forbidden — the VECTORIZED (`vstms`/`vldms`)
+   and gf2n opcode forms included (re-review-6).
+   `manifest_signature` hashes the FULL normalized assembly of every tape. FIVE
    committed negative controls are REJECTED: `threshold_smc_leaky` (public
    `reveal()` in main), `threshold_smc_subleak` (separate `@function_tape` public
    reveal + `print_ln`), `threshold_smc_namespoof` (name-spoofed subtape delivering
-   to the wrong player + a file sink), and `threshold_smc_openfalse` (a
-   `reveal(False)` of party 1's verdict in a spoofed `EQZ(3)_63` subtape).
+   to the wrong player + a file sink), `threshold_smc_openfalse` (a `reveal(False)`
+   of party 1's verdict in a spoofed `EQZ(3)_63` subtape via scalar `stms`/`ldms`),
+   and `threshold_smc_openfalse_vec` (the same leak crossing the tape boundary with
+   VECTORIZED `vstms`/`vldms`).
 2. **Strict runtime, exact two lines** (`private_run.py`): a correct party's
    captured STDOUT is exactly two non-empty lines — one own `ACCEPT`, one own
    `PAYLOAD`. Framework diagnostics go to stderr, so the parser skips NOTHING:
@@ -134,8 +137,12 @@ NOT claimed:
 - `threshold_smc_openfalse.mpc` — INTENTIONALLY LEAKY negative control #4: a tape
   named `EQZ(3)_63` (a name the real comparison library also emits) publicly
   reconstructs party 1's verdict with `reveal(False)` — no stdout, no sink, no
-  `privateoutput`. Committed so the gate can prove the pinned-multiset rule rejects
-  a `False` public open that the flag-based check treated as safe.
+  `privateoutput`. Crosses the tape boundary with scalar `stms`/`ldms`. Committed
+  so the gate can prove the memory-channel rule rejects a `False` public open.
+- `threshold_smc_openfalse_vec.mpc` — INTENTIONALLY LEAKY negative control #5: the
+  VECTORIZED-memory variant of #4 — the verdict crosses the tape boundary with
+  `vstms`/`vldms` instead of the scalar forms. Committed so the gate can prove the
+  memory-channel rule covers the vectorized opcodes a scalar-only regex missed.
 
 ## Next gate (unauthorized until this clears)
 

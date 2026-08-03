@@ -228,6 +228,24 @@ def test_manifest_rejects_main_store():
     assert any("stores to memory" in r for r in reasons)
 
 
+def test_manifest_rejects_vectorized_subtape_load():
+    # re-review-6 (Codex): the VECTORIZED memory ops (vstms/vldms) must be caught
+    # too -- the scalar-only regex missed them.
+    m = dict(GOOD_MASKED)
+    m["EQZ(3)_63-1"] = "vldms 2, s0(2), 4000\nasm_open 3, False, c0, s0"
+    ok, reasons = DI.is_private_manifest(m, EXP)
+    assert not ok
+    assert any("accesses memory" in r for r in reasons)
+
+
+def test_manifest_rejects_vectorized_main_store():
+    m = dict(GOOD_MASKED)
+    m["0"] = PRIV_ASM + "\nvstms 2, s6(2), 4000"
+    ok, reasons = DI.is_private_manifest(m, EXP)
+    assert not ok
+    assert any("stores to memory" in r for r in reasons)
+
+
 # ---- typed private evidence validator ----
 
 def _phex(c="a"):

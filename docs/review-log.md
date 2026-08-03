@@ -794,3 +794,27 @@ open until someone with actual MPC expertise addresses them.
   ADVERSARY.md + docs updated. Conformance suite UNCHANGED; Sigma_T NOT started.
   90 conformance tests green (46 functional + 44 private-gate).
 - **Status:** `open` (awaiting gate-2 re-review)
+
+### R-46 — Gate 2 re-review-6 REFUTED: vectorized memory-op bypass (vstms/vldms)
+
+- **Date:** 2026-08-03
+- **Source:** ChatGPT/Codex, gate-2 re-review (6th), issue #5 comment `#5169449025`.
+- **Objection:** The re-review-5 memory-channel regexes (`\b(g?stm[a-z]+)\b` /
+  `\b(g?ldm[a-z]+)\b`) matched only the SCALAR / gf2n store/load opcodes. The
+  VECTORIZED forms `vstms` / `vldms` (the `v` prefix breaks the anchor) were not
+  matched, so a `reveal(False)` that crosses the tape boundary with a vectorized
+  store/load bypassed rules (g)+(h). The tests also only covered scalar forms.
+- **Assessment:** Correct. Verified: a vectorized store/load of the verdict
+  compiles to `vstms` (MAIN) + `vldms` (subtape); the old regex matched neither,
+  so the re-review-5 gate would have accepted it.
+- **Resolution (one commit).** Broadened the regexes to `\bv?g?stm[a-z]*\b` /
+  `\bv?g?ldm[a-z]*\b`, covering scalar, gf2n (`g`), and VECTORIZED (`v`) forms.
+  Re-verified: the clean private build's MAIN performs no store and its subtapes
+  touch no memory under the broadened match (no false rejection), while the
+  vectorized leak is rejected on (g)+(h). Committed `threshold_smc_openfalse_vec.mpc`
+  — the vectorized-memory variant of openfalse (`vstms`/`vldms`) — as the fifth
+  executable negative control, and added synthetic `vstms`/`vldms` unit tests
+  (the scalar-only test gap Codex flagged). ADVERSARY.md + docs updated.
+  Conformance suite UNCHANGED; Sigma_T NOT started. 92 conformance tests green
+  (46 functional + 46 private-gate).
+- **Status:** `open` (awaiting gate-2 re-review)
