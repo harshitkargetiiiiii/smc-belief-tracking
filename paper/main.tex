@@ -1,0 +1,709 @@
+\documentclass[11pt]{article}
+
+% ---------------------------------------------------------------------------
+% Executable Conformance for a Secure-Multiparty Application
+% FIRST DRAFT. Baseline artifact: commit 305a3a8 of smc-belief-tracking.
+% Every substantive claim traces to a repository file (see \repo) or is
+% flagged \open{...}. No research gap is silently filled.
+% Venue class is [OPEN]; article is used so the draft compiles anywhere.
+% ---------------------------------------------------------------------------
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+
+% ---- helper commands -------------------------------------------------------
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\repo}[1]{{\footnotesize\textcolor{gray}{[\,#1\,]}}}
+\newcommand{\open}[1]{{\textbf{\textcolor{red!70!black}{[OPEN:\,#1]}}}}
+\newcommand{\Zk}{\mathbb{Z}_{2^{k}}}
+\newcommand{\Ztfour}{\mathbb{Z}_{2^{64}}}
+\newcommand{\thsmc}{\code{threshold\_SMC}}
+\newcommand{\initsmc}{\code{init\_SMC}}
+\newcommand{\SigmaT}{\Sigma_{T}}
+
+\newtheorem{conjecture}{Conjecture}
+\theoremstyle{definition}
+\newtheorem{obligation}{Proof obligation}
+
+\lstdefinestyle{mpc}{
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue!60!black},
+  commentstyle=\color{green!40!black}\itshape,
+  showstringspaces=false,
+  breaklines=true,
+  columns=fullflexible,
+  frame=single,
+  framesep=4pt,
+  xleftmargin=6pt,
+}
+\lstset{style=mpc}
+
+\title{\textbf{Executable Conformance for a Secure-Multiparty Application:\\
+What Implementation-Level Evidence Can Certify, and\\
+Where It Stops Short of a Privacy Proof}\\[4pt]
+{\normalsize\textsc{First draft --- artifact baseline commit \code{305a3a8}}}}
+
+\author{Harshit Kargeti\thanks{Author list, affiliations, and acknowledgments are
+\open{author metadata}. This manuscript was produced through a three-party
+adversarial loop (direction, implementation, adversarial review) described in
+Section~\ref{sec:process}; the division of credit is not yet fixed.}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Secure-multiparty computation (MPC) \emph{applications}---programs written on top
+of an MPC framework---increasingly ship with continuous-integration checks that
+are easy to mistake for privacy guarantees. We report a methodology and a
+boundary finding for one such application: the deterministic-query fragment of the
+knowledge-threshold belief computation of Mardziel, Hicks, Katz and Srivatsa
+(PLAS 2012), implemented in MP-SPDZ. Our first contribution is an
+\emph{executable-conformance} methodology: an independently written plaintext
+oracle, a tiny hand-verifiable fixture containing both an accepted and a rejected
+invocation, an anti-echo interface contract that keeps expected outputs out of the
+circuit, and SHA-bound, recomputed raw evidence. This makes a green check mean
+that a \emph{defined} functionality agrees with an \emph{independent} reference on
+the inputs tested, rather than that two co-derived models agree. Our second
+contribution is a negative, boundary result. We attempted to \emph{certify}, by
+static inspection of the compiled MP-SPDZ assembly, that each recipient's verdict
+is delivered privately. Six escalating adversarial re-reviews each produced a
+concrete build that leaked a verdict yet passed the then-current gate; the sixth
+cannot be closed, because the secret is routed into a comparison subtape through
+the very register-argument channel the honest code uses, and because a masked
+comparison-open and a raw secret-reveal are the same opcode. We therefore scope
+the static check honestly as a \emph{linter} and articulate the hand-off: a real
+non-leakage guarantee needs privacy of the executed circuit \emph{and} a semantic
+source-to-spec binding, neither of which functional conformance supplies in
+general. We are careful not to over-claim: we show the \emph{studied
+syntactic/opcode-level approach} is unsound against a source-controlling author,
+and state a stronger impossibility only as a conjecture with its missing proof
+obligations named. The artifact is public and reproducible against a pinned
+backend.
+\end{abstract}
+
+% ===========================================================================
+\section{Introduction}
+\label{sec:intro}
+
+An MPC framework such as MP-SPDZ~\cite{keller2020mpspdz} compiles a high-level
+program into a protocol that several parties execute so that each learns only its
+prescribed output. Building a correct \emph{application} on top of such a framework
+is a separate problem from the framework's own security proof: the application
+author can, by accident or by intent, write source that reveals a secret the
+functionality was meant to protect. When such an application is wired into
+continuous integration, a green check is tempting to read as evidence that the
+privacy property holds. This paper is about what that check can and cannot
+establish.
+
+Our vehicle is the knowledge-threshold belief computation proposed by Mardziel,
+Hicks, Katz and Srivatsa at PLAS 2012~\cite{plas2012}. In their setting, $N$
+parties each hold a secret; before releasing a query's output, the parties check
+\emph{inside} the MPC whether releasing it would let any party's posterior belief
+about another party's secret exceed a threshold, and---crucially---whether a party
+receives output or a rejection must not itself be observable by the others. The
+authors implemented one of their two mechanisms and \emph{simulated} the other,
+``SMC belief tracking,'' without implementing it. We build the smallest faithful
+circuit for a deterministic-query fragment of that second mechanism, not as an end
+in itself, but as a concrete artifact on which to study conformance and its
+limits.
+
+We are explicit about what this paper is \emph{not}. It is not ``the first
+implementation of PLAS belief tracking,'' and it makes no such claim: an earlier
+round of adversarial review on this project established, correctly, that
+implementing and timing a 2012 construction is not by itself a research
+contribution absent a new protocol, theorem, compiler, security result, or
+empirically supported systems insight.\repo{docs/review-log.md R-10} The
+contributions here are methodological and boundary-finding, and the artifact is
+their vehicle.
+
+\paragraph{Contributions.}
+\begin{enumerate}[leftmargin=1.4em,itemsep=2pt]
+\item \textbf{An executable-conformance methodology for an MPC application}
+(Section~\ref{sec:method}): an independent oracle, an accept-and-reject fixture, an
+anti-echo interface, and recomputed SHA-bound evidence, so that CI checks a defined
+functionality against an independent reference.
+\item \textbf{A reproducible conformance artifact} for the deterministic-query
+fragment of \thsmc{} ($N{=}3$, domain $\{0,1,2\}$, thresholds $1/2$), with 92
+conformance tests, a 228-case adversarial coverage sweep, and five committed
+executable negative controls, all green against a pinned backend
+(Section~\ref{sec:results}).
+\item \textbf{An empirical boundary result with a taxonomy}
+(Section~\ref{sec:bypass}): six escalating static-delivery bypasses plus an
+independent semantic bypass, each reproduced end to end, showing that the studied
+opcode-level certification approach is unsound against a source-controlling author,
+and isolating the two structural reasons.
+\item \textbf{A precise articulation of the hand-off}
+(Section~\ref{sec:handoff}): the two separate properties a real non-leakage
+guarantee needs, and why conformance supplies neither in general.
+\item \textbf{The adversarial review process as a reusable discipline}
+(Section~\ref{sec:process}), with an append-only, auditable log including a
+self-refutation.
+\end{enumerate}
+
+We foreground the honest scope of the boundary result now, so it is not
+over-read. What we \emph{demonstrate} is empirical: six concrete builds and a
+structural argument. What we do \emph{not} assert is a general impossibility
+theorem for static analysis; Section~\ref{sec:conjecture} states the stronger
+claim only as a conjecture and lists what a proof would require. A dataflow-aware
+analysis is explicitly not conjectured impossible---indeed it is one of the routes
+to a real guarantee.
+
+% ===========================================================================
+\section{Background}
+\label{sec:background}
+
+\paragraph{The functionality.}
+Following PLAS 2012~\cite{plas2012}, $N$ parties hold secrets $s_1,\dots,s_N$ in a
+finite domain $D$. Each observer $j$ maintains a belief $\delta_j$, a distribution
+over the other parties' secrets. A knowledge-threshold policy for party $i$ with
+public threshold $t_i$ demands that no other party ever assign posterior
+probability greater than $t_i$ to any single value of $s_i$. For a query $Q$, the
+mechanism runs, per recipient $j$, a check \code{tcheck} that quantifies over
+\emph{every possible output} $o$ of $Q$: it revises $\delta_j$ by conditioning on
+$Q(s){=}o$ and rejects if any protected party's marginal would exceed its
+threshold. Quantifying over all possible outputs---not merely the actual one---is
+what makes the accept/reject decision simulatable and stops the rejection itself
+from leaking.\repo{conformance/CONTRACT.md; Fig.~4} Acceptance uses ${\le}\,t_i$
+(equality allowed); the boundary is strict~$>$.
+
+We study the fragment in which queries are \emph{deterministic}, total, and public,
+and their choice is independent of the secrets. Two queries instantiate it:
+\code{p1\_is\_max} ($x_0 \ge x_1 \wedge x_0 \ge x_2$) and \code{sum\_even}
+($x_0{+}x_1{+}x_2$ even). Probabilistic queries need likelihood weighting and are
+out of scope.\repo{conformance/oracle.py; CONTRACT.md}
+
+\paragraph{Private delivery.}
+On accept, recipient $P_j$ learns the actual output $o$; on reject it learns a
+rejection, and its belief is unchanged. Each recipient's pair
+$(\mathrm{accept}_j, \mathrm{payload}_j)$ must be delivered privately, with the
+payload masked to a fixed constant on reject, and no party may learn another
+party's verdict.\repo{conformance/INTERFACE.md}
+
+\paragraph{The backend.}
+Circuits are compiled and run with MP-SPDZ pinned at commit
+\code{9d809599\dots}, using \code{replicated-ring-party.x}: three-party replicated
+secret sharing (Rep3) over $\Ztfour$, semi-honest, honest-majority.\repo{.github/workflows/benchmark.yml;
+ADVERSARY.md} The MP-SPDZ compiler emits a manifest of \emph{tapes} (a main tape
+plus comparison subtapes for equality/less-than), each a sequence of opcodes. Two
+facts about this compiled form drive Section~\ref{sec:bypass}: a public reveal and
+a legitimate masked comparison-open are the \emph{same} opcode
+(\code{asm\_open}/\code{vasm\_open}), and a value computed in one tape reaches
+another only through memory or through register arguments passed by
+\code{call\_tape}/\code{call\_arg}---a cross-tape register reference is a compiler
+error.
+
+\paragraph{Threat model and scope box.}
+We assume at most one semi-honest corruption, no collusion, authenticated encrypted
+channels, and process isolation. The test harness, however, runs all three parties
+as one operating-system user on one host: the isolation assumption is stated, not
+enforced by the test.\repo{conformance/ADVERSARY.md} We make no claim under
+collusion, a malicious party, unencrypted channels, or a shared-host adversary, and
+no performance claim of any kind.
+
+% ===========================================================================
+\section{Method: Executable Conformance for an MPC Application}
+\label{sec:method}
+
+The discipline has four parts, each of which exists to defeat a specific way a
+conformance check can be vacuous.
+
+\paragraph{An independent oracle.}
+The plaintext oracle is written from the paper, independently of the circuit and of
+the project's earlier exact-rational reference model, and transcribes the
+all-possible-outputs \code{tcheck} semantics directly.\repo{conformance/oracle.py}
+Independence matters: comparing the circuit against a reference co-derived from it
+would only confirm that two models built from the same misunderstanding agree. The
+transcription is not assumed correct---it carried a fatal error (conditioning on the
+actual output only, rather than all outputs) that adversarial review caught and
+that we corrected, adding a discriminating regression test whose two semantics give
+different visible results.\repo{docs/review-log.md R-13;
+test\_conformance.py::test\_discriminating\_case}
+
+\paragraph{An accept-and-reject fixture.}
+The fixture uses three parties, domain $\{0,1,2\}$, thresholds $1/2$, and two
+invocations chosen so that one invocation accepts for all recipients and a later
+one rejects for one recipient while the others accept, exercising per-recipient
+divergence and---the property the earlier circuits violated---belief preservation
+on reject.\repo{conformance/CONTRACT.md} A single fixture is a regression vector,
+not a proof of general conformance; we say so, and add targeted tests for the
+equality boundary, an unrealized output, an impossible event, a non-uniform prior,
+and the threshold range.
+
+\paragraph{An anti-echo interface.}
+Before any circuit was written, the interface was fixed to forbid an ``echo''
+circuit that simply returns what it is told.\repo{conformance/INTERFACE.md;
+docs/review-log.md R-17,R-18} The expected outputs and expected post-state never
+enter the circuit---neither compiled in nor as runtime inputs; they exist only in
+the external harness, which obtains them independently from the oracle. Circuit
+inputs are exactly the public parameters $(N, D, Q, t_i)$ and the secret-shared
+secrets and beliefs. The harness runs at least one secret state beyond the fixture,
+so a constant-output circuit cannot pass by accident. Beliefs travel as dense,
+unnormalized non-negative integer weight vectors in a fixed lexicographic order;
+two states are equal iff their weight vectors are proportional. The threshold check
+avoids division: for public $t_i = a/b$, marginal $M$, and total $Z$, compare
+$b\,M \le a\,Z$. Because MP-SPDZ comparison is \emph{signed}, the no-wraparound
+requirement is $B < 2^{k-1}$ with $B = \max(a,b)\cdot S \cdot W$, not the naive
+$2^k > B$; the naive bound is wrong and we pin a counterexample.\repo{INTERFACE.md;
+circuit\_spec.py; R-22} For the fixture, $B = 54 \ll 2^{63}$.
+
+\paragraph{Recomputed, SHA-bound evidence.}
+Every run retains a typed JSONL record: each party's raw stdout/stderr, return
+code, launch command, a source hash, a delivery signature, provenance, and channel
+status.\repo{conformance/validate\_evidence.py; private\_run.py} The validator
+enforces an exact field set and types, re-parses each retained transcript, and, in
+CI under \code{-{}-recompute}, requires each record's \code{source\_sha256} and
+delivery signature to equal values recomputed independently from the checked-out
+source and a fresh compile. It also binds each record to a canonical case by
+recomputing the input hash and the oracle verdict and requiring a bijection, so a
+replayed duplicate, an unbound input, or a forged verdict value is rejected.
+Provenance is real: committed local evidence is labeled unbound
+(\code{bound:false}); only CI runs carrying \code{GITHUB\_SHA} are bound, and the
+job asserts the MP-SPDZ head equals the pin.\repo{R-34,R-37,R-43;
+benchmark.yml} A dedicated \code{pipefail} canary proves a failing suite cannot go
+green through a logging pipe.\repo{R-31}
+
+\subsection{Artifact and results}
+\label{sec:results}
+The methodology is instantiated as a public artifact against the pinned backend.
+Functional conformance holds on the fixture (two invocations, accept then reject)
+and two additional valid states, matching the oracle on verdicts, payloads, and
+reconstructed weights (4/4). The adversarial coverage sweep passes 228 of 228
+cases (216 single-invocation and 12 carried), spanning all 27 secrets, both
+queries, and uniform, non-uniform, and per-party-scaled integer weights near the
+bit bound.\repo{coverage.py; results-coverage.txt} The test suites---92
+conformance tests (46 functional, 46 private-gate) and 9 reference tests---are
+green, as is the CI job that builds MP-SPDZ at the pin, asserts head equals pin,
+runs the harness, coverage, and private-delivery gate, and validates the uploaded
+evidence under \code{-{}-require-bound -{}-recompute}. The five committed negative
+controls of Section~\ref{sec:bypass} are rejected by the linter. No timing is
+reported: the repository's older timings measure a different, non-conforming
+circuit and are explicitly not to be cited.
+
+% ===========================================================================
+\section{The Private-Delivery Gate and Its Adversarial Refutation}
+\label{sec:bypass}
+
+Functional conformance says nothing about \emph{privacy} of delivery: a circuit can
+compute the right verdicts and then broadcast them. We therefore attempted a
+separate, automatic gate that a build must pass before it can be called private,
+and subjected it to adversarial re-review. The gate has three layers: a static
+inspection of the compiled delivery, a strict runtime transcript check, and the
+recomputed evidence binding of Section~\ref{sec:method}. Layers two and three are
+sound for what they check. Layer one is the subject of this section.
+
+\subsection{Six escalating bypasses}
+\label{sec:six}
+
+The motivating gross case is a build whose \code{reveal\_to(j)} is changed to a
+public \code{reveal()} while keeping the per-party print: it compiles to a public
+open of all six verdicts, yet a stdout oracle reports success, because a stdout
+check cannot distinguish private output from a public open followed by private
+printing.\repo{docs/review-log.md R-41} That moved us from a stdout oracle to
+inspecting the compiled delivery, and it is committed as the negative control
+\code{threshold\_smc\_leaky.mpc}. Six further re-reviews followed, each a concrete
+build that leaked a verdict yet passed the gate that existed when it was found.
+Table~\ref{tab:taxonomy} is the taxonomy.
+
+\begin{table*}[t]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\textwidth}{@{}l l X l l@{}}
+\toprule
+\textbf{ID} & \textbf{Mutation} & \textbf{Why it passed the then-current gate} &
+\textbf{Closed?} & \textbf{Committed control} \\
+\midrule
+B0 & public \code{reveal()} in main, keep per-party print &
+stdout oracle cannot tell private output from public open + private print &
+yes & \code{leaky.mpc} \\
+B1 & separate \code{@function\_tape} public reveal + print &
+inspector read only the main tape &
+yes & \code{subleak.mpc} \\
+B2 & name-spoofed \code{EQZ(spoof)} subtape: wrong-player delivery + file sink &
+masked allowlist keyed on tape \emph{names} &
+yes & \code{namespoof.mpc} \\
+B3 & \code{reveal(False)} in an EQZ/LTZ-named subtape &
+gate treated \code{False} opens as safe (they are still public) &
+yes & \code{openfalse.mpc} \\
+B4 & \code{reveal(False)} in an \emph{existing} subtape body via scalar
+\code{stms}/\code{ldms} &
+multiset pins tape names/counts, not bodies &
+yes & \code{openfalse.mpc} \\
+B5 & same, crossing the boundary with vectorized \code{vstms}/\code{vldms} &
+memory regex matched only scalar/gf2n forms &
+yes & \code{openfalse\_vec.mpc} \\
+B6 & verdict routed via \code{call\_tape}/\code{call\_arg} register arguments &
+rules cover only the memory channel; this is the honest channel &
+\textbf{no} & --- (unforbiddable) \\
+\bottomrule
+\end{tabularx}
+\caption{The adversarial mutation taxonomy. B0--B5 were each closed by
+strengthening the static gate; B6 cannot be closed without breaking the honest
+build, which forced the linter-scoping decision. Each closed row has a committed
+executable negative control.\repo{docs/limits.md; review-log.md R-41--R-47}}
+\label{tab:taxonomy}
+\end{table*}
+
+Each closure sharpened the gate: from main-tape-only to whole-manifest inspection
+(B1); from a name-based allowlist to content-based rules (B2); from trusting the
+open flag to pinning the exact multiset of comparison subtapes (B3); from names and
+counts to forbidding the memory channel a verdict would need to enter a subtape
+(B4); and from a scalar-only memory pattern to one covering vectorized and
+gf2n forms (B5).\repo{review-log.md R-42--R-46} The clean build stores nothing in
+memory in its main tape and touches no memory in its subtapes, so forbidding memory
+is a sound restriction with no false positives: memory was an attacker-introduced
+channel.
+
+\subsection{Why this is structural, not a patch away}
+\label{sec:structural}
+
+B6 does not fit the pattern. The verdict is a register in the main tape; a
+cross-tape register reference is a compiler error; so the only ways a verdict can
+reach a subtape's open are memory---now forbidden---or the register arguments passed
+by \code{call\_tape} and received by \code{call\_arg}. But that register channel is
+exactly how the honest equality and less-than subtapes receive their operands.
+Forbidding it would reject the honest build. So B6 cannot be closed. Two facts
+combine to defeat any purely syntactic gate:\repo{docs/limits.md}
+\begin{enumerate}[leftmargin=1.4em,itemsep=1pt]
+\item \emph{Open-type ambiguity.} A public reveal and a masked comparison-open are
+the same opcode; the \code{True}/\code{False} flag controls only a post-open
+correctness check, not privacy. Whether an open is safe depends on whether its
+operand is masked---a dataflow property present in the assembly but not determined
+by opcode identity alone.
+\item \emph{An unforbiddable channel.} A secret can be moved into a subtape's open
+through the same \code{call\_arg} register channel the honest subtapes use.
+\end{enumerate}
+Enumerating channels is therefore a losing game against the root ambiguity in~(1).
+We scope layer one honestly as a \emph{linter}: it rejects the five committed
+negative controls and catches gross or accidental leaks and regressions, but a
+PASS is explicitly not a non-leakage certificate. The runtime banners of the tools
+say so.\repo{delivery\_inspect.py; private\_run.py}
+
+\subsection{An independent semantic bypass}
+\label{sec:semantic}
+
+On a different axis, a build can deliver $(\mathrm{accept}_j,\mathrm{payload}_j)$
+privately to exactly the correct recipient and still compute the \emph{wrong}
+secret function inside. Privacy of delivery says nothing about \emph{which} value
+is delivered. Functional conformance binds source to specification, but only up to
+test coverage, not in general. This ``correct recipient, wrong function'' gap is
+orthogonal to the six leak channels and is why privacy alone is
+insufficient.\repo{docs/limits.md}
+
+\subsection{Can the boundary be made a theorem?}
+\label{sec:conjecture}
+
+The directive under which this work proceeds is explicit that we must not overstate.
+What Sections~\ref{sec:six}--\ref{sec:structural} establish is an empirical
+demonstration plus a structural argument, for \emph{one} backend and the
+\emph{studied} opcode-level approach. We do not assert a general impossibility. A
+stronger claim would be:
+
+\begin{conjecture}[dataflow-free syntactic certification is unsound]
+\label{conj}
+Fix the pinned MP-SPDZ Rep3 backend and the functionality $F = \thsmc$. Call a
+checker \emph{syntactic/dataflow-free} if it is a computable predicate on the
+compiled tape-manifest that is invariant under a transformation class $T$ which
+preserves opcode identity and tape structure but may relabel an open's operand
+(substituting a verdict-derived register for a masked one) and may move a register
+between tapes via the \code{call\_arg} channel. Then there exist source programs
+$P_{\mathrm{safe}}$ (delivers $F$ privately) and $P_{\mathrm{leak}}$ (leaks a
+verdict) whose compiled manifests are $T$-related; hence any such checker $C$
+satisfies $C(P_{\mathrm{safe}}) = C(P_{\mathrm{leak}})$ and cannot both accept
+$P_{\mathrm{safe}}$ and reject $P_{\mathrm{leak}}$. No dataflow-free syntactic
+checker is sound and complete for non-leakage on this backend.
+\end{conjecture}
+
+We state this as a conjecture, not a theorem, because three obligations are unmet:
+
+\begin{obligation}
+A formal model of the compiled manifest and a rigorous definition of the
+transformation class $T$---i.e., a precise formalization of ``does not do
+dataflow'' as invariance under operand relabeling and cross-tape \code{call\_arg}
+moves.
+\end{obligation}
+\begin{obligation}
+An explicit $T$-related pair $P_{\mathrm{safe}}, P_{\mathrm{leak}}$ with a proof
+that they are $T$-equivalent and that the honest build is a fixed point of the gate.
+We have empirical instances (the B3/B4 \code{reveal(False)} pairs), not a proof of
+$T$-equivalence.
+\end{obligation}
+\begin{obligation}
+A protocol-level definition of ``leak,'' to prove $P_{\mathrm{leak}}$ actually
+leaks and $P_{\mathrm{safe}}$ does not.
+\end{obligation}
+
+Obligation~3 is the crux: proving the impossibility rigorously requires the very
+simulation-based privacy definition whose absence is the boundary this paper is
+about. We therefore keep the asserted result empirical and mark
+Conjecture~\ref{conj} \open{theorem: formalize $T$, exhibit a proven $T$-equivalent
+pair, and supply a protocol-level leak definition}. Crucially, a \emph{dataflow-aware}
+analysis is \emph{not} covered by the conjecture and is not claimed impossible;
+Section~\ref{sec:handoff} lists it as a route to a real guarantee.
+
+% ===========================================================================
+\section{The Hand-off: What Would Make It a Real Guarantee}
+\label{sec:handoff}
+
+The boundary is not that privacy is unknowable; it is that the evidence type
+changes. A real non-leakage guarantee needs two \emph{separate} properties, and
+functional conformance supplies neither in general.\repo{docs/limits.md}
+
+\begin{description}[leftmargin=1em,itemsep=2pt]
+\item[Privacy of the executed circuit.] A protocol-level Rep3 simulation argument
+(a human MPC specialist), or a formally-verified comparison primitive plus a
+dataflow analysis proving every open's operand is masked and no verdict-derived
+register flows into any open. This shows the executed functionality is computed
+privately.
+\item[Semantic source-to-spec binding.] An argument that the circuit computes the
+\emph{intended} belief-tracking function, not merely one that agrees with the
+oracle on the tested cases. Without this, privacy still permits the ``correct
+recipient, wrong function'' build of Section~\ref{sec:semantic}.
+\end{description}
+
+A Rep3 proof alone establishes the first and not the second; conformance testing
+gives partial, coverage-bounded evidence toward the second and nothing toward the
+first. Table~\ref{tab:handoff} places each property with the actor that must supply
+it. The practical recommendation is that an artifact should represent this boundary
+in its own outputs---our tools print a linter caveat at runtime and the threat-model
+document leads its ``not claimed'' list with sound non-leakage by static
+inspection---so that a green check is never mistaken for a privacy proof.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\columnwidth}{@{}l X l@{}}
+\toprule
+\textbf{Property} & \textbf{Evidence type} & \textbf{Supplied by} \\
+\midrule
+Functional correctness (tested) & conformance vs.\ independent oracle & this work \\
+No gross delivery leak & static linter + strict transcript & this work \\
+Evidence integrity & recomputed, SHA-bound provenance & this work \\
+Executed-circuit privacy & Rep3 simulation or verified dataflow primitive &
+\open{expert / future} \\
+Semantic source-to-spec binding & correctness argument beyond test coverage &
+\open{future} \\
+\bottomrule
+\end{tabularx}
+\caption{The hand-off. The top three rows are what implementation-level evidence
+establishes; the bottom two require a protocol-level argument this work does not
+provide.}
+\label{tab:handoff}
+\end{table}
+
+% ===========================================================================
+\section{The Adversarial Review Process}
+\label{sec:process}
+
+The results above were produced by a three-party loop: direction, implementation,
+and adversarial review, with a shared repository as the only mailbox.\repo{docs/workflow.md}
+The reviewer is instructed to refute rather than assess, and to default to
+``refuted'' when uncertain. Every critique is logged in an append-only review log,
+whether it survived or not; the log has 47 entries.\repo{docs/review-log.md} We
+report the process as a contribution for two reasons. First, it has teeth: it
+caught a fatal specification bug (Section~\ref{sec:method}) and produced the entire
+bypass sequence of Section~\ref{sec:bypass}. Second, it is self-correcting in a way
+worth documenting---our own soundness premise that ``memory is the only cross-tape
+channel'' was asserted at one round (justifying the memory-channel rules) and
+refuted at the next by the \code{call\_arg} channel, and both the assertion and its
+refutation remain in the log.\repo{review-log.md R-45,R-47} Two models agreeing is
+weak evidence, for correlated reasons, so the process is a filter, not a
+substitute: the project's standing rule is that a human MPC specialist must sign
+off before any security claim ships.
+
+% ===========================================================================
+\section{Related Work}
+\label{sec:related}
+
+We position against five categories. We flag at the outset that the
+novelty statements below are \open{literature review: the project has not run a
+search reaching Google Scholar or Semantic Scholar}, and that the paper's framing
+depends on completing it.
+
+\paragraph{MPC frameworks and compilers.} MP-SPDZ~\cite{keller2020mpspdz} and peers
+provide the substrate; to our current knowledge they do not offer application-level
+conformance against an independent oracle nor certify per-recipient delivery
+\open{confirm}.
+
+\paragraph{Knowledge-based security and quantitative information flow.} The
+functionality is from PLAS 2012~\cite{plas2012}, which simulated rather than
+implemented SMC belief tracking; we target its deterministic-query fragment
+\open{confirm no later work implements it with a conformance target}.
+
+\paragraph{Formal verification of MPC and secure compilation.} Verified MPC
+compilers, type systems for information flow, and computational-soundness results
+are the correct heavy machinery our boundary hands off to; the negative result is
+positioned as ``why an opcode-level syntactic shortcut fails,'' not as competing
+with dataflow-aware verification \open{cite the specific lines of work}.
+
+\paragraph{Conformance, differential, and metamorphic testing of cryptographic
+code.} Test-vector conformance and differential testing of crypto libraries are the
+closest methodological neighbors; the transfer to an MPC \emph{application} with an
+anti-echo interface and recomputed evidence is the claimed novelty
+\open{substantiate against that literature}.
+
+\paragraph{Static analysis and linting for information flow.} Our negative result
+names a specific failure mode for opcode-level linters of MPC bytecode: opcode
+identity versus dataflow, and an honest-used register channel \open{position
+against existing IFC-linting work}.
+
+% ===========================================================================
+\section{Threats to Validity}
+\label{sec:threats}
+
+\emph{Construct.} ``Conformance'' means agreement with an independent oracle on
+tested inputs; the oracle is a human transcription of one paper's
+deterministic-query fragment and carried a fatal bug until review caught it, so
+unreviewed transcription errors may remain, and no MPC expert has yet signed off.
+\emph{Internal.} The linter's soundness for the memory channel rests on empirical
+facts about the pinned backend (the clean build uses no memory; a cross-tape
+register reference is a compile error); a different backend version could change
+opcode semantics or channels. The \code{tls\_certs\_present} flag is a weak proxy
+(files exist $\ne$ wire encrypted), a caveat we state.\repo{ADVERSARY.md}
+\emph{External.} Results are for one functionality, $N{=}3$, domain $\{0,1,2\}$, one
+backend, semi-honest honest-majority, and a single-host harness that is not an
+adversarially isolated deployment; generalization is \open{E4}. \emph{The boundary
+result is empirical, not a theorem} (Section~\ref{sec:conjecture}). \emph{Semantic
+gap.} Even perfect delivery privacy would not establish that the circuit computes
+the intended function beyond tested cases. \emph{No performance claims} are made;
+the repository's timings measure a different, non-conforming circuit and are
+explicitly not to be cited.\repo{README; docs/gap.md}
+
+% ===========================================================================
+\section{Limitations and Future Work}
+\label{sec:future}
+
+Persistent secret-shared state across invocations ($\SigmaT$) is unimplemented and,
+under the current directive, unauthorized; it is future work, not a gap we fill
+here. The single highest-value next step is the literature review that gates the
+novelty framing (Section~\ref{sec:related}). The experiment most likely to change a
+conclusion is a genuine \emph{dataflow-aware} delivery checker: if it closes the gap
+the linter cannot, it changes the boundary; if it fails, it upgrades the negative
+result from ``syntactic gates fail'' to ``here is exactly where dataflow is
+needed.'' \open{dataflow checker: new implementation, requires authorization}
+Attempting the impossibility theorem of Section~\ref{sec:conjecture}, generalizing
+beyond the fixture to larger domains and probabilistic queries, and obtaining the
+protocol-level Rep3 argument from a specialist are the remaining directions.
+
+% ===========================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+Executable conformance against an independent oracle, backed by an anti-echo
+interface and recomputed evidence, is a rigorous and reusable discipline for MPC
+applications: it establishes real functional correctness on tested inputs, catches
+gross information leaks, and makes a green check mean something. It also has a
+sharp, nameable boundary. Attempting to certify per-recipient non-leakage by static
+inspection of the compiled assembly fails against an author who controls the
+source, for structural reasons---a masked open and a raw reveal are the same
+opcode, and the secret can travel the same register channel the honest code
+uses---and that boundary is exactly where implementation-level evidence must hand
+off to a protocol-level privacy proof. Naming the boundary, rather than papering
+over it with a green check, is the contribution we most want to stand.
+
+% ===========================================================================
+\appendix
+\section{Claim--evidence--limitation table}
+\label{app:claims}
+
+Table~\ref{tab:claims} lists the claims the paper makes, each with its repository
+evidence and the limitation stated alongside it.
+
+\begin{table*}[t]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\textwidth}{@{}l X X@{}}
+\toprule
+\textbf{Claim} & \textbf{Evidence} & \textbf{Limitation} \\
+\midrule
+C1 Circuit reproduces the oracle on an accept-and-reject fixture &
+\code{harness.py}, \code{oracle.py}, 4/4 named cases &
+per-tested-input, not general; one fixture is a regression vector \\
+C2 Agreement across a 228-case adversarial sweep &
+\code{coverage.py}; \code{216 single + 12 carried = 228 pass} &
+fixed enumerable set at $N{=}3$, $D{=}\{0,1,2\}$ \\
+C3 Oracle is independent and transcribes all-outputs \code{tcheck} &
+\code{oracle.py}, R-13 fix, discriminating test &
+human transcription; no expert sign-off \\
+C4 Interface forbids echo-cheating &
+\code{INTERFACE.md}, extra secret state &
+enforced by construction/review, not a machine proof \\
+C5 Signed bound is $B<2^{k-1}$; fixture safe &
+\code{circuit\_spec.py}, R-22 &
+general bound stated, not auto-checked \\
+C6 Linter rejects five negative controls &
+\code{delivery\_inspect.py}, five \code{.mpc} controls &
+a linter, not a non-leakage proof \\
+C7 Runtime transcript fails closed &
+\code{strict\_parse\_party}, \code{test\_private.py} &
+cannot see shares/timing/network \\
+C8 Evidence is typed, SHA-bound, recomputed &
+\code{validate\_evidence.py}, CI \code{-{}-recompute} &
+does not bind source to intended spec beyond tested cases \\
+C9 Provenance is real (bound only in CI) &
+\code{repo\_provenance()}, R-34 &
+not a reproducibility guarantee on arbitrary machines \\
+C10 Studied syntactic gate is unsound vs.\ a source-controlling author &
+R-41--R-47, \code{docs/limits.md} &
+empirical + structural, not a theorem; this backend \\
+C11 Conformance binds source to spec only up to coverage &
+\code{docs/limits.md}, \code{gap.md} &
+motivates the semantic hand-off property \\
+C12 The review loop is auditable and self-correcting &
+\code{review-log.md} R-45$\to$R-47 &
+process evidence, not completeness \\
+\bottomrule
+\end{tabularx}
+\caption{Claim, evidence, and limitation---grounded only in the repository at
+\code{305a3a8}.}
+\label{tab:claims}
+\end{table*}
+
+\section{A minimal leak and the honest channel}
+\label{app:listings}
+
+The \code{reveal(False)} bypass (B3/B4) reconstructs a verdict publicly with the
+``correctness-check-disabled'' flag, which the earlier gate wrongly treated as
+safe:
+
+\begin{lstlisting}[language=Python]
+# spoofed EQZ(3)_63 subtape: no stdout, no privateoutput, no sink
+w = sint.load_mem(4000)   # verdict moved from main
+w.reveal(False)           # STILL a public open; False != private
+\end{lstlisting}
+
+\noindent B6 is different: the honest comparison subtapes receive their operands
+through the same register channel a leak would use, so it cannot be forbidden:
+
+\begin{lstlisting}[language=Python]
+# main tape invokes a comparison subtape by passing registers directly:
+#   call_tape 12, 3, ci0, ... s6(3), s0(3) ...   (no memory)
+# the subtape receives them via call_arg -- the honest path.
+\end{lstlisting}
+
+\begin{thebibliography}{9}
+\bibitem{plas2012}
+P.~Mardziel, M.~Hicks, J.~Katz, and M.~Srivatsa.
+\newblock Knowledge-Oriented Secure Multiparty Computation.
+\newblock In \emph{PLAS}, 2012.
+\newblock \open{full citation and DOI/URL to be finalized}.
+
+\bibitem{keller2020mpspdz}
+M.~Keller.
+\newblock MP-SPDZ: A Versatile Framework for Multi-Party Computation.
+\newblock In \emph{ACM CCS}, 2020.
+\newblock \open{confirm exact citation details}.
+\end{thebibliography}
+
+\end{document}
