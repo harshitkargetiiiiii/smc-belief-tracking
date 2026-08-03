@@ -4,8 +4,9 @@ DECISION (re-review-7): the compiled-delivery check is scoped to a LINTER, not a
 non-leakage proof. Six adversarial re-reviews (issue #5) showed a static,
 opcode-level gate cannot be made sound against a source-controlling author — a
 masked comparison-open and a raw verdict-reveal are the same opcode, and a verdict
-can be routed into a subtape through channels the honest code uses (memory AND
-`call_tape`/`call_arg` register args). The finding is written up in
+can be routed into a subtape via the `call_tape`/`call_arg` register-arg channel the
+honest code uses (the memory channel the linter forbids was attacker-only). The
+finding is written up in
 `docs/limits.md`. The linter still rejects five committed negative controls and
 catches gross / accidental leaks; a real non-leakage guarantee is deferred to the
 protocol-level human review ADVERSARY.md mandates. Sigma_T persistence remains

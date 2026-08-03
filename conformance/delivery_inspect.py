@@ -2,11 +2,12 @@
 LINTER, NOT A SOUNDNESS PROOF (re-review-7 decision). This inspects compiled
 assembly for GROSS leak patterns and rejects five committed negative controls, but
 it does NOT and CANNOT certify non-leakage. A masked comparison-open and a raw
-verdict-reveal are the SAME opcode (`asm_open`, either flag), and a verdict can be
-routed into a subtape's open through sanctioned channels the honest code ALSO uses
--- memory (store/load) AND `call_tape`/`call_arg` register arguments (Codex's
-call_arg finding, issue #5: the clean comparison subtapes receive their operands
-via `call_arg`, no memory, so that channel cannot be forbidden). A `PASS` here
+verdict-reveal are the SAME opcode (`asm_open`, either flag; masked vs raw is not
+determined by opcode identity alone), and a verdict can be routed into a subtape's
+open via the `call_tape`/`call_arg` register-argument channel the honest comparison
+subtapes THEMSELVES use (Codex's call_arg finding, issue #5; verified: the clean
+subtapes receive operands via `call_arg`, no memory), so it cannot be forbidden.
+The memory channel this linter DOES forbid (rules g+h) was attacker-only. A `PASS`
 means "no known gross leak pattern found", NOT "provably private". Sound
 non-leakage needs the protocol-level human/formal review ADVERSARY.md mandates and
 is OUT OF SCOPE for this linter. See docs/limits.md.
