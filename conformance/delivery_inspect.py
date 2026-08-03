@@ -1,5 +1,5 @@
 """
-Compiled-delivery inspection by CONTENT + a pinned tape multiset (re-review-4).
+Compiled-delivery inspection by CONTENT + pinned multiset + memory channel (rr-5).
 
 Re-review-2 keyed the masked-subtape allowlist on the tape KIND string
 (`(EQZ|LTZ)\\(`). But an .mpc author controls tape names: `program.new_tape(fn,
@@ -37,11 +37,18 @@ A build is private-delivering iff ALL hold:
       by the STRICT pattern `^(EQZ|LTZ)\\(\\d+\\)_\\d+$` (an author-introduced
       tape, incl. a non-digit name spoof like `EQZ(spoof)`, is rejected).
   (f) the non-main tape base MULTISET equals the pinned comparison subtapes
-      exactly ({EQZ(3)_63, EQZ(81)_63, LTZ(36)_64}). This is the load-bearing
-      defense against a `reveal(False)` hidden in a masked-named subtape: an
-      author can only ADD an open (removing a real comparison breaks functional
-      conformance), so any injected open lands in a NEW or DUPLICATE subtape and
-      breaks the multiset. `threshold_smc_openfalse.mpc` is the committed control.
+      exactly ({EQZ(3)_63, EQZ(81)_63, LTZ(36)_64}); an author who ADDS an open in
+      a new/duplicate subtape breaks it (removing a real comparison breaks
+      functional conformance).
+  (g) the MAIN tape performs NO memory STORE, and (h) every non-main tape performs
+      NO memory access at all. Together (g)+(h) are the load-bearing defense
+      against a `reveal(False)` injected into an EXISTING expected subtape while
+      keeping the multiset (re-review-5): the verdict is a MAIN register, a
+      cross-tape register reference is a compiler error, so the only way a verdict
+      reaches a subtape's open is MAIN store -> subtape load. The clean build's
+      MAIN never stores and its subtapes never touch memory, so both are forbidden.
+      `threshold_smc_openfalse.mpc` (a `reveal(False)` needing a MAIN store + a
+      subtape load) is the committed control.
 
 manifest_signature() now hashes the FULL normalized assembly of every tape, so an
 injected sink/tape/open changes it (the old 4-pattern hash collided).
@@ -67,6 +74,16 @@ _SINK = re.compile(
     r"print_bit\w*|print_mem\w*|intoutput|floatoutput|rawoutput|"
     r"writesocket\w*|writesharestofile|writefileclear|writefileshare|"
     r"write_to_file)\b")
+
+# Memory opcodes. The verdict is computed in MAIN; a cross-tape register reference
+# is a COMPILER ERROR ("Register from other tape"), so the ONLY way a verdict can
+# reach a subtape (to be opened there) is via memory: MAIN stores it, the subtape
+# loads it. The clean private build's MAIN performs NO store and its subtapes touch
+# memory NOT AT ALL (verified), so forbidding a MAIN store and ANY subtape memory
+# access closes that channel -- catching a `reveal(False)` injected into an
+# expected subtape even when the tape multiset is left untouched (re-review-5).
+_MEMSTORE = re.compile(r"\b(g?stm[a-z]+)\b")     # stms/stmc/stmsi/stmci/stmint/gstm*
+_MEMLOAD = re.compile(r"\b(g?ldm[a-z]+)\b")       # ldms/ldmc/ldmsi/ldmci/ldmint/gldm*
 
 # The EXACT non-main tape multiset the computation must generate (both queries).
 # re-review-4: `asm_open(..., False, ...)` is ALSO a public reveal (the flag only
@@ -145,6 +162,11 @@ def is_private_manifest(man, expected_subtapes=None):
     main_sinks = _lines_matching(_SINK, main)
     if main_sinks:
         reasons.append(f"main tape has non-delivery output opcode: {main_sinks[:1]}")
+    # (g) main must not STORE to memory: that is the only channel by which a
+    # verdict register can reach a subtape (cross-tape refs are a compiler error).
+    main_stores = _lines_matching(_MEMSTORE, main)
+    if main_stores:
+        reasons.append(f"main tape stores to memory (verdict exfil channel): {main_stores[:1]}")
 
     for kind, text in man.items():
         base = _base(kind)
@@ -162,6 +184,11 @@ def is_private_manifest(man, expected_subtapes=None):
             reasons.append(f"output/exfil opcode in non-main tape {base}: {sinks[:1]}")
         if _CONDPRINT.search(text):
             reasons.append(f"per-player print in non-main tape {base}")
+        # (h) subtapes are pure (no memory): a verdict can only enter a subtape via
+        # a load, so ANY subtape memory access is a possible verdict-exfil path.
+        mem = _lines_matching(_MEMLOAD, text) + _lines_matching(_MEMSTORE, text)
+        if mem:
+            reasons.append(f"non-main tape {base} accesses memory (verdict exfil path): {mem[:1]}")
 
     # (c) public open-to-all forbidden anywhere
     for kind, text in man.items():

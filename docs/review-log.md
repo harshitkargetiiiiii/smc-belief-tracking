@@ -763,3 +763,34 @@ open until someone with actual MPC expertise addresses them.
   fact. Conformance suite UNCHANGED; Sigma_T NOT started. 88 conformance tests
   green (46 functional + 42 private-gate).
 - **Status:** `open` (awaiting gate-2 re-review)
+
+### R-45 — Gate 2 re-review-5 REFUTED: reveal(False) injected into an existing slot
+
+- **Date:** 2026-08-02
+- **Source:** ChatGPT/Codex, gate-2 re-review (5th), issue #5 comment `#5161622955`.
+- **Objection:** The re-review-4 multiset pin catches an EXTRA or DUPLICATE open
+  tape, but it still accepts a `reveal(False)` inserted into / replacing the body
+  of an expected `EQZ(3)_63` slot while keeping the exact same three tape names.
+  The multiset (names/counts) does not inspect tape BODIES.
+- **Assessment:** Correct. Confirmed: `is_private_manifest` with a synthetic
+  manifest whose 3 base names are exactly the pinned set, but whose `EQZ(3)_63`
+  body carries a `ldms` + `asm_open ..., False` of the verdict, was ACCEPTED by
+  the re-review-4 gate.
+- **Resolution (one commit).** Close the actual exfil CHANNEL rather than chase
+  tape identity. The verdict is a MAIN-tape register; a cross-tape register
+  reference is a MP-SPDZ compiler error ("Register from other tape"), verified.
+  So the ONLY way a verdict can reach a subtape (to be opened there) is via
+  memory: MAIN stores it, the subtape loads it. Verified: the clean private
+  build's MAIN performs NO memory store (`stm*`) and its EQZ/LTZ subtapes touch
+  memory NOT AT ALL. `is_private_manifest` now adds (g) reject any MAIN memory
+  store and (h) reject ANY memory access in a non-main tape. Combined with "no
+  open in MAIN", no open anywhere can involve a verdict: MAIN can't open it and
+  can't export it; a subtape can't import it. The reproduced attack (the exact
+  same 3 names, a `reveal(False)` in the `EQZ(3)_63` body) is now rejected on
+  rule (h) — "non-main tape accesses memory (verdict exfil path)" — with the
+  multiset left intact. Kept as layers: multiset, name pattern, no subtape
+  sink/`privateoutput`/`cond_print`, full-assembly signature.
+  `threshold_smc_openfalse.mpc` now trips (g)+(h) as well as the multiset.
+  ADVERSARY.md + docs updated. Conformance suite UNCHANGED; Sigma_T NOT started.
+  90 conformance tests green (46 functional + 44 private-gate).
+- **Status:** `open` (awaiting gate-2 re-review)

@@ -1,21 +1,22 @@
-# STATUS (2026-08-02, gate 2 re-review-4 fixes: private delivery)
+# STATUS (2026-08-02, gate 2 re-review-5 fixes: private delivery)
 
-Re-review-4 corrected a WRONG premise in the re-review-3 gate: `asm_open(...,
-False, ...)` is ALSO a public reveal (the flag only skips the post-open check, not
-privacy), so a `reveal(False)` of a verdict in a masked-named subtape leaked.
-Fixed by pinning the comparison-subtape multiset. Sigma_T persistence remains
-UNAUTHORIZED. Conformance suite + evidence gate UNCHANGED.
+Re-review-5: pinning the tape multiset caught an added/duplicate open tape, but a
+`reveal(False)` injected INTO an existing expected `EQZ(3)_63` slot (multiset
+untouched) still leaked. Closed by binding the MEMORY channel. Sigma_T persistence
+remains UNAUTHORIZED. Conformance suite + evidence gate UNCHANGED.
 
-Delivery inspection (`delivery_inspect.py`) now binds on CONTENT + a pinned tape
-multiset, with NO reliance on the open flag:
+Delivery inspection (`delivery_inspect.py`) binds on CONTENT, a pinned tape
+multiset, AND the memory channel, with NO reliance on the open flag:
 
 - `privateoutput` only in main with players [0,0,1,1,2,2] (none in any subtape);
   NO file/socket/print sink outside guarded `cond_print` in main; every non-main
-  tape must match `^(EQZ|LTZ)\(\d+\)_\d+$`; and — the load-bearing rule — the
-  non-main tape base multiset must be EXACTLY {EQZ(3)_63, EQZ(81)_63, LTZ(36)_64}.
-  Since an author can only ADD an open (removing a comparison breaks functional
-  conformance), any injected open — True OR False — lands in a NEW or DUPLICATE
-  subtape and breaks the multiset. `manifest_signature` hashes the full assembly.
+  tape must match `^(EQZ|LTZ)\(\d+\)_\d+$`; the non-main tape base multiset must be
+  EXACTLY {EQZ(3)_63, EQZ(81)_63, LTZ(36)_64}; and — the load-bearing rule (rr-5) —
+  the MAIN tape performs NO memory STORE and every subtape touches memory NOT AT
+  ALL. The verdict is a MAIN register and a cross-tape register reference is a
+  compiler error, so the only channel by which it can reach a subtape's open is
+  MAIN store → subtape load; the clean build uses neither. `manifest_signature`
+  hashes the full assembly.
 - FOUR committed negative controls are rejected: `threshold_smc_leaky` (public
   reveal in main), `threshold_smc_subleak` (separate-tape reveal + print),
   `threshold_smc_namespoof` (name-spoofed wrong-player delivery + file sink), and
@@ -27,7 +28,7 @@ binds each record to a canonical case (recomputed `input_hash` + oracle
 signature — rejecting replay, unbound `input_hash`, forged verdict values, and
 forged bound records. `compile_manifest` clears stale assembly before compiling.
 
-Tests: 88 in `conformance/` (46 functional conformance + 42 private-gate), all
+Tests: 90 in `conformance/` (46 functional conformance + 44 private-gate), all
 green; `reference/` suite unchanged. Functional + compiled-delivery only; NOT a
 simulation-security proof.
 

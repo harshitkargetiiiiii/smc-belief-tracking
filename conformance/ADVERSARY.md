@@ -65,11 +65,15 @@ Demonstrated, executably:
    tape multiset: `privateoutput` only in main with players `[0,0,1,1,2,2]` (none
    in any subtape); NO cleartext/file/socket sink (`print_*` / `intoutput` /
    `writesocket*` / …) anywhere except guarded `cond_print_*` in main; every
-   non-main tape must match `^(EQZ|LTZ)\(\d+\)_\d+$`; and — the load-bearing rule —
-   the non-main tape base multiset must be EXACTLY the pinned comparison subtapes
-   `{EQZ(3)_63, EQZ(81)_63, LTZ(36)_64}`. Since an author can only ADD an open
-   (removing a real comparison breaks functional conformance), any injected open —
-   `True` or `False` — lands in a NEW or DUPLICATE subtape and breaks the multiset.
+   non-main tape must match `^(EQZ|LTZ)\(\d+\)_\d+$`; the non-main tape base
+   multiset must be EXACTLY `{EQZ(3)_63, EQZ(81)_63, LTZ(36)_64}` (an injected open
+   in a NEW or DUPLICATE subtape breaks it); and — the load-bearing rule against a
+   `reveal(False)` injected into an EXISTING expected subtape while KEEPING the
+   multiset (re-review-5) — the MAIN tape performs NO memory STORE and every
+   subtape touches memory NOT AT ALL. The verdict is a MAIN register, and a
+   cross-tape register reference is a compiler error, so the only channel by which
+   a verdict can reach a subtape's open is MAIN store → subtape load; the clean
+   build uses neither, so both are forbidden.
    `manifest_signature` hashes the FULL normalized assembly of every tape. FOUR
    committed negative controls are REJECTED: `threshold_smc_leaky` (public
    `reveal()` in main), `threshold_smc_subleak` (separate `@function_tape` public

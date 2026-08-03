@@ -206,6 +206,28 @@ def test_manifest_signature_detects_injected_sink():
     assert DI.manifest_signature(GOOD_MASKED) != DI.manifest_signature(leaked)
 
 
+def test_manifest_rejects_body_injected_reveal_keeping_multiset():
+    # re-review-5 (Codex): a reveal(False) injected into an EXISTING expected slot,
+    # leaving the 3-name multiset UNTOUCHED. The verdict can only enter a subtape
+    # via a memory load (cross-tape register refs are a compiler error), so the
+    # memory-channel rule (h) catches it -- NOT the multiset.
+    m = dict(GOOD_MASKED)
+    m["EQZ(3)_63-1"] = "ldms s99, 4000\nasm_open 3, False, c0, s99"
+    ok, reasons = DI.is_private_manifest(m, EXP)
+    assert not ok
+    assert any("accesses memory" in r for r in reasons)
+    assert not any("multiset" in r for r in reasons)   # multiset is intact here
+
+
+def test_manifest_rejects_main_store():
+    # a MAIN memory store is the channel that moves a verdict into a subtape
+    m = dict(GOOD_MASKED)
+    m["0"] = PRIV_ASM + "\nstms s3, 4000"
+    ok, reasons = DI.is_private_manifest(m, EXP)
+    assert not ok
+    assert any("stores to memory" in r for r in reasons)
+
+
 # ---- typed private evidence validator ----
 
 def _phex(c="a"):
