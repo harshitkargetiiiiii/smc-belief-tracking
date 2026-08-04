@@ -36,8 +36,7 @@ An MP-SPDZ Case Study on What Implementation-Level\\
 Evidence Checks, and Where It Stops Short of a Privacy Proof}\\[4pt]
 {\normalsize\textsc{Experience report / case study --- artifact baseline commit \code{305a3a8}}}}
 
-\author{Harshit Kargeti\thanks{Author list, affiliations, and acknowledgments are
-\open{author metadata}. \textbf{Correlated-authorship disclosure:} the circuit,
+\author{Harshit Kargeti\thanks{\textbf{Correlated-authorship disclosure:} the circuit,
 the pseudo-oracle, the tests, the review synthesis, and this manuscript were
 produced within a single project and substantially with AI assistance; model
 agreement is not independent validation (see \S\ref{sec:threats}).}}
@@ -68,7 +67,10 @@ rejecting the honest build. We conclude only that \emph{this opcode-identity /
 channel-blocklist linter cannot be promoted to a general non-leakage checker};
 distinguishing legitimate from leaking flows needs analysis stronger than
 opcode/channel identity (operand/provenance-sensitive dataflow, typing, or a
-verified IR), which we did not evaluate. We do not claim
+verified IR), which we did not evaluate. A pre-registered, out-of-sample mutation
+run against the frozen linter sharpens this boundary with a source-realizable
+\emph{structural} false accept: a multiset-preserving wrong-recipient delivery the
+linter passes and a downstream transcript check caught for that concrete build. We do not claim
 this principle is new --- that leakage is a dataflow rather than opcode-identity
 property is established for constant-time and smart-contract bytecode analysis; our
 contribution is the MPC-application instantiation, the pinned-backend mechanism, and
@@ -114,11 +116,15 @@ recomputed evidence discipline as the local delta.
 \item A \textbf{reproducible case-study artifact} for the deterministic-query
 fragment of \thsmc{} (\S\ref{sec:results}): a fixture and a bounded 228-case
 adversarial matrix checked against the pseudo-oracle, and five committed executable
-negative controls, against a pinned backend.
+negative controls, against a pinned backend; it reproduces from a clean checkout and
+replicates its backend-critical observations on one further MP-SPDZ version
+(\S\ref{sec:repro}).
 \item A \textbf{reproducible adversarial mutation study} (\S\ref{sec:mutation}):
 one motivating transcript failure, six compiled-delivery mutation cases, and one
 semantic mutation, with an archived corpus and a machine-readable detection matrix,
-showing the limit of the studied linter \emph{at its exact strength}.
+showing the limit of the studied linter \emph{at its exact strength}; a
+\emph{pre-registered, out-of-sample} held-out evaluation (\S\ref{sec:heldout}) adds
+the decisive new result --- a source-realizable structural false accept (H-R2).
 \item A statement of the \textbf{assurance boundary and hand-off}
 (\S\ref{sec:boundary}): the operational property the checks demonstrate, and the two
 protocol-level properties a real non-leakage guarantee would additionally need.
@@ -264,11 +270,29 @@ pseudo-oracle's visible outputs, payloads, and reconstructed weights. A
 per-party-scaled integer weights near the bit bound) all match the
 pseudo-oracle~\repo{coverage.py; results-coverage.txt}. This is a constructed test
 matrix, \emph{not} general coverage. The conformance package holds 92 tests --- 46
-functional and 46 delivery-gate/linter tests --- and 9 reference tests, all green;
+functional and 46 delivery-gate/linter tests --- and 9 reference test functions
+(25 collected items), all green;
 test counts are not themselves a result. Five committed executable negative controls
 are rejected by the linter (\S\ref{sec:mutation}). No timing is reported: the
 repository's older timings measure a different, non-conforming circuit and must not
 be cited~\repo{README; docs/gap.md}.
+
+\subsection{Reproduction and cross-version replication}
+\label{sec:repro}
+The frozen artifact reproduces from a fresh checkout with a fresh build of the pinned
+MP-SPDZ backend: 117 collected \code{pytest} items (the 92 conformance items plus the
+9 reference test functions, which expand to 25), the named-case harness $4/4$, the
+$228$-case matrix $228/228$, the recomputed evidence, and the B4/B6/S1 reproductions
+all reproduce, and the normalized per-tape \code{manifest\_signature} values recompute
+to the archived detection-matrix values~\repo{paper/REPRODUCIBILITY.md}. We reproduce
+those \emph{normalized-assembly} signatures, \emph{not} raw binaries or assembly
+byte-for-byte. Separately, the paper-critical backend observations additionally
+replicate on one further MP-SPDZ version, v0.4.3 (\code{26a60536}): the shared
+open-instruction family, the honest \calltape/\callarg{} path, the B6 behaviour, and
+S1's structural linter-PASS with an executed oracle mismatch all recur, with no
+compile/API or semantic change in what we exercised~\repo{paper/CROSS\_VERSION.md}.
+This is two versions, not a cross-version compatibility or version-independence claim:
+only one additional version, on one host, for the probed observations, was tested.
 
 % ===========================================================================
 \section{The adversarial mutation study}
@@ -280,8 +304,10 @@ compiled-delivery linter and subjected it to an \emph{adaptive} sequence of sour
 mutations by the build-time adversary. We are explicit that this is a
 \emph{retrospective, adaptively discovered} sequence, not a complete or
 independently designed taxonomy: the checker was repeatedly hardened against the same
-mutations later used as evidence (adaptive overfitting), and there are no held-out
-mutations from which to estimate detector effectiveness (\S\ref{sec:threats}).
+mutations later used as evidence (adaptive overfitting), so this sequence itself
+yields no held-out estimate of detector effectiveness. We add a separate
+pre-registered corpus to probe the frozen checker's out-of-sample behaviour --- not
+to estimate detector effectiveness either (\S\ref{sec:heldout}, \S\ref{sec:threats}).
 
 \paragraph{Accounting.} One motivating transcript failure (\textbf{B0}); six
 compiled-delivery mutation cases (\textbf{B1--B6}); one semantic mutation
@@ -379,6 +405,38 @@ single-host harness is not adversarially isolated; \S\ref{sec:threats}).
 Delivery-linting checks \emph{how} values are delivered, not \emph{which}; only the
 functional pseudo-oracle, bounded by test coverage, constrains that.
 
+\subsection{A pre-registered held-out evaluation}
+\label{sec:heldout}
+The sequence above is adaptive and cannot estimate detector effectiveness
+(\S\ref{sec:threats}). We therefore added a \emph{pre-registered, out-of-sample}
+evaluation: a corpus of $22$ mutants with locked predictions was committed
+\emph{before} execution (preregistration \code{d3d11e4}) and run once against the
+frozen linter (results \code{9e22007})~\repo{paper/heldout/}. It is out-of-sample but
+\emph{not} an independent-adversary evaluation --- the mutants and predictions were
+authored within the same project that built the checker --- so we report per-category
+outcomes and \emph{no} aggregate security-detection rate.
+
+The decisive result concerns delivery \emph{structure}. Among three pre-registered
+source-realizable recipient-structure mutants, the frozen linter rejected H-R1 and
+H-R3 and accepted the multiset-preserving H-R2 permutation. \textbf{H-R2 is a
+demonstrated source-realizable structural false accept of the delivery linter}: a
+compiled build that delivers each party's verdict to the \emph{wrong} recipient while
+preserving the pinned destination-player multiset $[0,0,1,1,2,2]$ --- all that
+rule~(a) inspects. It is caught only downstream: the strict transcript parser
+(\S\ref{sec:method}) rejected \emph{this concrete} build because a foreign
+\code{PRIV\,$j$} record appears on the receiving party's stream; we do \emph{not}
+claim the runtime layer catches recipient permutations in general. Three
+source-realizable \emph{semantic} mutants (negated accept, swapped accept/payload, a
+neighbour's payload) likewise pass the linter and fail the pseudo-oracle, echoing S1.
+The remaining \emph{synthetic} mutants are \emph{manifest-level rule-coverage probes}
+--- hand-built assembly patterns testing whether a rule fires, with \emph{unproven}
+source realizability, \emph{not} executable attacks, and excluded from any
+detector-efficacy denominator (the corpus also contains provenance and
+compile-invalid cases, scored separately~\repo{paper/heldout/}). The informative probe is H-O3: an \callarg{} open of a
+register-passed value in an existing masked subtape that no current rule rejects ---
+the same gap B6 names (\S\ref{sec:b6}), now exhibited at the manifest
+level~\repo{paper/heldout/README.md}.
+
 % ===========================================================================
 \section{The assurance boundary}
 \label{sec:boundary}
@@ -392,8 +450,9 @@ and smart-contract bytecode (\S\ref{sec:related}).
 applications):} adaptive linting of a security property can produce false
 confidence, and such tooling should print its assurance boundary; ours does~\repo{delivery\_inspect.py
 banner}.
-\item \textbf{Pinned-backend finding (backend/version specific):} MP-SPDZ's shared
-open instruction and the \calltape/\callarg{} path at \code{9d809599}, and the
+\item \textbf{Backend finding (backend-specific; observed at the pin \code{9d809599}
+and one additional version, v0.4.3, not version-independent):} MP-SPDZ's shared
+open instruction and the \calltape/\callarg{} path, and the
 consequence that the studied opcode-identity / channel-blocklist linter cannot be
 promoted to a general non-leakage checker (\calltape/\callarg{} cannot be
 blocklisted, since the honest build uses it).
@@ -407,6 +466,23 @@ binding} --- that the circuit computes the intended function, not merely one tha
 agrees with the pseudo-oracle on tested cases (S1 shows why privacy of delivery is
 insufficient without it). A Rep3 proof establishes (i) and not (ii); our checks give
 coverage-bounded evidence toward (ii) and nothing toward (i).
+
+\paragraph{A layered account.} Concretely the assurance is a chain of partial checks,
+no one of them a privacy proof. The pinned \emph{compiler} rejects one naive
+cross-tape transfer outright (a direct cross-tape register reference is a compile
+error; the B3/B5 source mutations therefore used an attacker-introduced memory hop;
+\S\ref{sec:heldout}). The \emph{delivery
+linter} rejects gross structural and channel classes --- public opens, illicit sinks,
+disallowed memory, off-pin tapes --- including opcode/channel forms outside its design
+set (exercised as manifest-level probes, not executable source attacks), yet H-R2
+shows it misses a multiset-preserving wrong-recipient \emph{structure}. The
+\emph{runtime transcript check} caught that one concrete mutant; the
+\emph{pseudo-oracle} catches semantic mutations delivery-linting passes (S1 and the
+held-out semantic mutants); and \emph{evidence recomputation} protects the
+consistency and provenance of these records under the trusted CI. In the tested
+examples, later layers catch some failures earlier checks leave open; the layers are
+complementary, not complete, and none, alone or together, is the protocol-level
+privacy proof the hand-off above still requires.
 
 % ===========================================================================
 \section{The adversarial review process (experience)}
@@ -474,9 +550,11 @@ trusted); a repository-controlling adversary voids them. Workflow hashes establi
 \item \textbf{Correlated authorship and AI assistance.} Circuit, pseudo-oracle,
 tests, review synthesis, and manuscript were produced within one project and
 substantially with AI assistance; model agreement is not independent validation.
-\item \textbf{Adaptive overfitting.} The linter was hardened against the same
-mutations later used as evidence; there are no held-out mutations, so we do not
-estimate detector effectiveness.
+\item \textbf{Adaptive overfitting, partly mitigated.} The linter was hardened
+against the same mutations later used as evidence. We added a \emph{pre-registered,
+out-of-sample} corpus run once against the frozen checker (\S\ref{sec:heldout}); it is
+out-of-sample but \emph{not} independent-adversary (same-project authorship), so we
+still report per-category outcomes rather than a detector-effectiveness rate.
 \item \textbf{Pseudo-oracle pseudo-independence.} The oracle shares PLAS with the
 circuit; a correlated spec misreading is possible. A cross-check against the
 project's exact reference model is limited because that model implements a
@@ -491,7 +569,9 @@ there is no external replication.
 pseudo-oracle on tested inputs. Results are for one deterministic-query
 functionality, $N{=}3$, $D{=}\{0,1,2\}$, one backend, and a single-host harness that
 is not an adversarially isolated deployment; we do not imply an evaluated methodology
-across MPC applications plural.
+across MPC applications plural. The backend-critical observations were additionally
+checked on one further MP-SPDZ version (v0.4.3, \S\ref{sec:repro}); that is two
+versions, not a cross-version compatibility claim.
 \item \textbf{No performance or simulation-security claim}; the boundary result is a
 case-study observation, not a theorem.
 \end{itemize}
@@ -541,15 +621,36 @@ reproduction. B0--B3 and B5 reference the five committed controls under
 compiled-manifest counterexample (not committed); B6 and S1 are reconstructed source
 mutations under \code{paper/mutations/}.
 
+\section{Strengthening evidence: statements and pointers}
+\label{app:evidence}
+Every empirical statement added in the strengthening pass maps to committed evidence
+and an already-reviewed pull request (the artifact under \code{conformance/} is
+unchanged from \code{305a3a8}).
+\begin{center}\footnotesize\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{@{}X l@{}}
+\toprule
+\textbf{Statement (repository evidence pointer)} & \textbf{PR} \\
+\midrule
+Clean-room reproduction: 117 items, harness $4/4$, $228/228$, evidence recompute, B4/B6/S1 \repo{paper/REPRODUCIBILITY.md} & \#7 \\
+Normalized \code{manifest\_signature} values recompute (not raw bytes) \repo{paper/mutations/detection\_matrix.json} & \#7 \\
+Backend observations replicate on v0.4.3 \code{26a60536}; two versions only \repo{paper/CROSS\_VERSION.md} & \#7 \\
+Pre-registered held-out corpus, run once; out-of-sample, not independent-adversary \repo{paper/heldout/PLAN.md; preregistration \code{d3d11e4}, results \code{9e22007}} & \#8 \\
+H-R2 source-realizable structural false accept; transcript parser caught this mutant \repo{paper/heldout/README.md; results.json} & \#8 \\
+H-V1--H-V3 semantic mutants: linter PASS, oracle FAIL \repo{paper/heldout/results.json} & \#8 \\
+H-O3 / synthetic probes: manifest-level, unproven realizability, no detector rate \repo{paper/heldout/README.md} & \#8 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
 \begin{thebibliography}{99}\footnotesize
 \bibitem{plas2012} P.~Mardziel, M.~Hicks, J.~Katz, M.~Srivatsa. Knowledge-Oriented Secure Multiparty Computation. PLAS, 2012.
-\bibitem{keller2020mpspdz} M.~Keller. MP-SPDZ: A Versatile Framework for Multi-Party Computation. ACM CCS, 2020. IACR ePrint 2020/521. \open{confirm pages}
+\bibitem{keller2020mpspdz} M.~Keller. MP-SPDZ: A Versatile Framework for Multi-Party Computation. ACM CCS, 2020, pp.~1575--1590. IACR ePrint 2020/521.
 \bibitem{ctverif} J.~B.~Almeida, M.~Barbosa, G.~Barthe, F.~Dupressoir, M.~Emmi. Verifying Constant-Time Implementations. USENIX Security, 2016.
 \bibitem{binsecrel} L.-A.~Daniel, S.~Bardin, T.~Rezk. Binsec/Rel: Efficient Relational Symbolic Execution for Constant-Time at Binary Level. IEEE S\&P, 2020.
 \bibitem{securify} P.~Tsankov et al. Securify: Practical Security Analysis of Smart Contracts. ACM CCS, 2018.
 \bibitem{kerschbaum} F.~Kerschbaum. An Information-Flow Type-System for Mixed Protocol Secure Computation. ACM ASIACCS, 2013.
 \bibitem{skalkanear} C.~Skalka, J.~P.~Near. Language-Based Security for Low-Level MPC. PPDP, 2024. arXiv:2407.16504.
-\bibitem{skalkanear2} C.~Skalka, J.~P.~Near. SMT-Boosted Security Types for Low-Level MPC. FASE/ETAPS, 2025. arXiv:2501.17824.
+\bibitem{skalkanear2} C.~Skalka, J.~P.~Near. SMT-Boosted Security Types for Low-Level MPC. ESOP 2025, LNCS 15695, pp.~258--285. arXiv:2501.17824.
 \bibitem{oracleproblem} E.~T.~Barr, M.~Harman, P.~McMinn, M.~Shahbaz, S.~Yoo. The Oracle Problem in Software Testing: A Survey. IEEE TSE, 2015.
 \bibitem{masc} A.~S.~Ami, N.~Cooper, K.~Kafle, K.~Moran, D.~Poshyvanyk, A.~Nadkarni. Why Crypto-detectors Fail: A Systematic Evaluation of Cryptographic Misuse Detection Techniques. IEEE S\&P, 2022.
 \bibitem{reprobuilds} C.~Lamb, S.~Zacchiroli. Reproducible Builds: Increasing the Integrity of Software Supply Chains. IEEE Software, 2022.
