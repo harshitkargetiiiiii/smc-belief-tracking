@@ -36,8 +36,7 @@ An MP-SPDZ Case Study on What Implementation-Level\\
 Evidence Checks, and Where It Stops Short of a Privacy Proof}\\[4pt]
 {\normalsize\textsc{Experience report / case study --- artifact baseline commit \code{305a3a8}}}}
 
-\author{Harshit Kargeti\thanks{Author list, affiliations, and acknowledgments are
-\open{author metadata}. \textbf{Correlated-authorship disclosure:} the circuit,
+\author{Harshit Kargeti\thanks{\textbf{Correlated-authorship disclosure:} the circuit,
 the pseudo-oracle, the tests, the review synthesis, and this manuscript were
 produced within a single project and substantially with AI assistance; model
 agreement is not independent validation (see \S\ref{sec:threats}).}}
@@ -471,7 +470,8 @@ coverage-bounded evidence toward (ii) and nothing toward (i).
 \paragraph{A layered account.} Concretely the assurance is a chain of partial checks,
 no one of them a privacy proof. The pinned \emph{compiler} rejects one naive
 cross-tape transfer outright (a direct cross-tape register reference is a compile
-error, which is why a memory hop was needed; \S\ref{sec:heldout}). The \emph{delivery
+error; the B3/B5 source mutations therefore used an attacker-introduced memory hop;
+\S\ref{sec:heldout}). The \emph{delivery
 linter} rejects gross structural and channel classes --- public opens, illicit sinks,
 disallowed memory, off-pin tapes --- including opcode/channel forms outside its design
 set (exercised as manifest-level probes, not executable source attacks), yet H-R2
@@ -644,13 +644,13 @@ H-O3 / synthetic probes: manifest-level, unproven realizability, no detector rat
 
 \begin{thebibliography}{99}\footnotesize
 \bibitem{plas2012} P.~Mardziel, M.~Hicks, J.~Katz, M.~Srivatsa. Knowledge-Oriented Secure Multiparty Computation. PLAS, 2012.
-\bibitem{keller2020mpspdz} M.~Keller. MP-SPDZ: A Versatile Framework for Multi-Party Computation. ACM CCS, 2020. IACR ePrint 2020/521. \open{confirm pages}
+\bibitem{keller2020mpspdz} M.~Keller. MP-SPDZ: A Versatile Framework for Multi-Party Computation. ACM CCS, 2020, pp.~1575--1590. IACR ePrint 2020/521.
 \bibitem{ctverif} J.~B.~Almeida, M.~Barbosa, G.~Barthe, F.~Dupressoir, M.~Emmi. Verifying Constant-Time Implementations. USENIX Security, 2016.
 \bibitem{binsecrel} L.-A.~Daniel, S.~Bardin, T.~Rezk. Binsec/Rel: Efficient Relational Symbolic Execution for Constant-Time at Binary Level. IEEE S\&P, 2020.
 \bibitem{securify} P.~Tsankov et al. Securify: Practical Security Analysis of Smart Contracts. ACM CCS, 2018.
 \bibitem{kerschbaum} F.~Kerschbaum. An Information-Flow Type-System for Mixed Protocol Secure Computation. ACM ASIACCS, 2013.
 \bibitem{skalkanear} C.~Skalka, J.~P.~Near. Language-Based Security for Low-Level MPC. PPDP, 2024. arXiv:2407.16504.
-\bibitem{skalkanear2} C.~Skalka, J.~P.~Near. SMT-Boosted Security Types for Low-Level MPC. FASE/ETAPS, 2025. arXiv:2501.17824.
+\bibitem{skalkanear2} C.~Skalka, J.~P.~Near. SMT-Boosted Security Types for Low-Level MPC. ESOP 2025, LNCS 15695, pp.~258--285. arXiv:2501.17824.
 \bibitem{oracleproblem} E.~T.~Barr, M.~Harman, P.~McMinn, M.~Shahbaz, S.~Yoo. The Oracle Problem in Software Testing: A Survey. IEEE TSE, 2015.
 \bibitem{masc} A.~S.~Ami, N.~Cooper, K.~Kafle, K.~Moran, D.~Poshyvanyk, A.~Nadkarni. Why Crypto-detectors Fail: A Systematic Evaluation of Cryptographic Misuse Detection Techniques. IEEE S\&P, 2022.
 \bibitem{reprobuilds} C.~Lamb, S.~Zacchiroli. Reproducible Builds: Increasing the Integrity of Software Supply Chains. IEEE Software, 2022.
