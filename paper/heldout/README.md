@@ -4,168 +4,213 @@ Out-of-sample evaluation of `conformance/delivery_inspect.py` @ **305a3a8**
 (delivery_inspect.py git-blob `6ef7b6de`), MP-SPDZ pin `9d809599`. The checker was
 **not modified** before or after the run. Pre-registration commit:
 **`d3d11e4d1fb93905f31cd319d28212fb7798dc23`** (PLAN.md + corpus + mutants + runner,
-no results). This file and `results.json` are the execution-results commit. The run
-is a **single** execution; nothing was tuned, deleted, or replaced afterward.
+no results). The run is a **single** execution; nothing was tuned, deleted, or
+replaced afterward.
+
+> **Interpretation update (Codex review, post-run).** This README was revised after
+> a Codex review of the interpretation. **The pre-registration commit `d3d11e4`,
+> `corpus.py`/`corpus.json`, the runner, the checker, and the raw `results.json` are
+> unchanged** — only this reporting file was edited. The revisions: (1) the synthetic
+> manifest transforms are reframed as **manifest-level rule-coverage probes**, not
+> executable security violations, and are **no longer aggregated into a
+> "detection rate"** (the pre-registered `denominator: inclusive` label in
+> `corpus.json` is therefore **not** reported as a security metric); (2) the
+> source-realizable recipient result is stated at exact strength (three mutants, not
+> a rate); (3) **H-O3** is a manifest-level **rule-gap PASS** with unproven source
+> realizability — **H-R2** is the one *demonstrated source-realizable* structural
+> false accept; (4) the H-R2 runtime-catch claim is narrowed to this concrete mutant;
+> (5) the raw `prediction_matches: 18` field is explained; (6) the provenance probes
+> are downgraded to non-isolated supporting checks; (7) "byte-deterministic" →
+> "outcome-deterministic".
 
 ## TL;DR
 
-- **All 22 mutants matched their pre-registered predictions** (18 linter PASS/REJECT
-  calls + 2 provenance + 2 compile-invalid; **0 mismatches**).
-- **Strict delivery detection: 2/3** (source-realizable structural mutants).
-  **Inclusive: 10/12** (adds synthetic-manifest structural counterexamples).
-- **Two false-accepts, both pre-registered:** **H-R2** (source-realizable recipient
-  *permutation*) and **H-O3** (synthetic `call_arg` open — the checker's acknowledged
-  gap). H-R2 is caught by the artifact's **runtime evidence layer**, not the linter.
-- New in-scope structural leaks the linter had **never seen** — indirect (`ldmsi`)
-  and gf2n (`gldms`) memory, socket/file/`print_int` sinks, vectorized public open —
-  were **all caught** on the intended rule.
-- Value-semantic mutants (incl. a genuine cross-party value leak) **pass the linter
-  and fail the oracle**, as designed.
+- **Every mutant behaved as pre-registered** (see the accounting of the raw
+  `prediction_matches: 18` field below).
+- **Source-realizable recipient-structure result (exact strength):** among the three
+  pre-registered source-realizable recipient-structure mutants, the frozen linter
+  **rejected H-R1 and H-R3** and **accepted the multiset-preserving H-R2
+  permutation**. We do **not** treat "2 of 3" as an estimate of general detector
+  effectiveness.
+- **H-R2 is the one demonstrated source-realizable *structural* false accept**: a
+  compiled, executable build whose delivery the linter passes but which delivers a
+  party's verdict to the wrong recipient. The **synthetic** probe **H-O3** is a
+  *manifest-level rule-gap* (a PASS with no rule to reject it), whose realizability
+  from source is **unproven**, not a demonstrated executable attack.
+- **Synthetic transforms are manifest-level rule probes**, reported per-rule (below),
+  **without** an aggregate security-detection percentage. On the patterns probed,
+  rules (c)/(d)/(f)/(h) each fired as intended — including forms absent from the
+  B-series (indirect `ldmsi`, gf2n `gldms`, `writesocketshare`, `print_int`,
+  vectorized open).
+- **Value-semantic** source mutants (H-V1/H-V2/H-V3): linter **PASS** + oracle
+  **FAIL** (out of scope, by design; H-V3 is a genuine cross-party value leak).
 
 ## Per-mutant: predicted vs actual
 
-| ID | category | predicted | actual | match | classification |
-|----|----------|-----------|--------|:----:|----------------|
-| H-R1 | recipient | REJECT | REJECT | yes | structural |
-| H-R2 | recipient | PASS | PASS / runtime-REJECT | yes | structural |
-| H-R3 | recipient | REJECT | REJECT | yes | structural |
-| H-O1 | open | REJECT | REJECT | yes | structural |
-| H-O2 | open | REJECT | REJECT | yes | structural |
-| H-O3 | open | PASS | PASS | yes | structural |
-| H-T1 | topology | PASS | PASS | yes | benign |
-| H-T2 | topology | REJECT | REJECT | yes | benign |
-| H-T3 | topology | REJECT | REJECT | yes | structural |
-| H-C1 | channel | REJECT | REJECT | yes | structural |
-| H-C2 | channel | REJECT | REJECT | yes | structural |
-| H-C3 | channel | PASS | PASS | yes | benign |
-| H-V1 | value_semantic | PASS | PASS / oracle-FAIL | yes | semantic (out-of-scope) |
-| H-V2 | value_semantic | PASS | PASS / oracle-FAIL | yes | semantic (out-of-scope) |
-| H-V3 | value_semantic | PASS | PASS / oracle-FAIL | yes | semantic (out-of-scope) |
-| H-P1 | transcript | REJECT | REJECT | yes | structural |
-| H-P2 | transcript | REJECT | REJECT | yes | structural |
-| H-P3 | transcript | REJECT | REJECT | yes | structural |
-| H-E1 | provenance | validate-REJECT | validate=REJECT | yes | provenance |
-| H-E2 | provenance | validate-REJECT | validate=REJECT | yes | provenance |
-| H-X1 | compile_invalid | compile-FAIL | compile-FAIL | yes | compile-invalid |
-| H-X2 | compile_invalid | compile-FAIL | compile-FAIL | yes | compile-invalid |
+`kind`: **source (exec)** = a real `.mpc` compiled and (where relevant) executed;
+**synthetic (manifest)** = a manifest-level transform that probes whether a rule
+fires on an assembly pattern (not a demonstrated executable attack);
+**provenance** = scored against `validate_evidence.py`.
 
+| ID | kind | category | predicted | actual | match |
+|----|------|----------|-----------|--------|:----:|
+| H-R1 | source (exec) | recipient | REJECT | REJECT | yes |
+| H-R2 | source (exec) | recipient | PASS | PASS / runtime-REJECT(this mutant) | yes |
+| H-R3 | source (exec) | recipient | REJECT | REJECT | yes |
+| H-O1 | synthetic (manifest) | open | REJECT | REJECT | yes |
+| H-O2 | synthetic (manifest) | open | REJECT | REJECT | yes |
+| H-O3 | synthetic (manifest) | open | PASS | PASS | yes |
+| H-T1 | synthetic (manifest) | topology | PASS | PASS | yes |
+| H-T2 | synthetic (manifest) | topology | REJECT | REJECT | yes |
+| H-T3 | synthetic (manifest) | topology | REJECT | REJECT | yes |
+| H-C1 | synthetic (manifest) | channel | REJECT | REJECT | yes |
+| H-C2 | synthetic (manifest) | channel | REJECT | REJECT | yes |
+| H-C3 | synthetic (manifest) | channel | PASS | PASS | yes |
+| H-V1 | source (exec) | value_semantic | PASS | PASS / oracle-FAIL | yes |
+| H-V2 | source (exec) | value_semantic | PASS | PASS / oracle-FAIL | yes |
+| H-V3 | source (exec) | value_semantic | PASS | PASS / oracle-FAIL | yes |
+| H-P1 | synthetic (manifest) | transcript | REJECT | REJECT | yes |
+| H-P2 | synthetic (manifest) | transcript | REJECT | REJECT | yes |
+| H-P3 | synthetic (manifest) | transcript | REJECT | REJECT | yes |
+| H-E1 | provenance | provenance | validate-REJECT | validate=REJECT | yes |
+| H-E2 | provenance | provenance | validate-REJECT | validate=REJECT | yes |
+| H-X1 | source (exec) | compile_invalid | compile-FAIL | compile-FAIL | yes |
+| H-X2 | source (exec) | compile_invalid | compile-FAIL | compile-FAIL | yes |
 
-`match` = actual matched the pre-registered prediction. `runtime-REJECT` = caught by
-the frozen `private_run` strict parser (the runtime evidence layer), not by the
-delivery linter. `oracle-FAIL` = frozen oracle mismatch (value-semantic).
+`runtime-REJECT(this mutant)` = the frozen `private_run` strict parser rejected
+**this specific** executed build (not a general property — see H-R2 below).
+`oracle-FAIL` = frozen oracle mismatch (value-semantic).
 
-## Metrics (honest buckets — compile failures never counted as detections)
+## Results by kind
 
-**delivery_inspect detection rate** (denominator = genuine gross-delivery-structure /
-wrong-recipient violations that are compile-valid; semantic, benign, provenance, and
-compile-invalid mutants are excluded):
+### A. Source-realizable, executable (the mutants that support security claims)
 
-| denominator | caught (REJECT) | n | rate | false-accepts |
-|---|:---:|:---:|:---:|---|
-| **strict** (source-realizable) | 2 | 3 | 0.67 | H-R2 |
-| **inclusive** (+ synthetic manifests) | 10 | 12 | 0.83 | H-R2, H-O3 |
+- **Recipient structure (H-R1, H-R2, H-R3).** Exact outcome: the linter **rejected
+  H-R1** (extra foreign recipient → destination multiset `[0,0,1,1,1,2,2]`, rule (a))
+  and **H-R3** (collapse to one player → `[0,0,0,0,0,0]`, rule (a)), and **accepted
+  H-R2** (permutation preserving `[0,0,1,1,2,2]`). This is the concrete result for
+  three mutants, **not** a detector-effectiveness rate.
+- **Value-semantic (H-V1, H-V2, H-V3).** Correct delivery structure, wrong delivered
+  value: linter **PASS** (3/3, by design) and frozen-oracle **FAIL** (3/3) on the
+  pre-registered case set. The linter disclaims value semantics; these confirm it,
+  with H-V3 (party *j* receives party *(j+1)*'s payload) a genuine cross-party value
+  leak the delivery linter accepts.
+- **Compile-invalid (H-X1, H-X2).** Both fail to compile → bucketed compile-invalid,
+  **never** counted as detections. H-X1 is meaningful: the naive direct cross-tape
+  reference (`accept[1].reveal(False)` inside a `new_tape`) does not compile —
+  `CompilerError: … "s749" … Register from other tape` — which is *why* B3/B5 needed
+  a memory hop, and a layer **below** the linter.
 
-Other buckets (reported separately, **not** in the rate):
+### B. Synthetic manifest-level rule probes (NOT a security-detection rate)
 
-- **semantic / out-of-scope** (H-V1, H-V2, H-V3): linter **PASS** (3/3, by design) +
-  oracle **FAIL** (3/3). The linter disclaims value semantics; these confirm it.
-- **benign**: correct-accepts H-T1 (reorder), H-C3 (legit `call_arg` register use);
-  one over-conservative **false-reject** H-T2 (extra well-formed masked tape — a
-  non-leaking topology change rejected by the exact-multiset rule (f)).
-- **provenance** (different frozen checker, `validate_evidence.py`): H-E1 (forged
-  `delivery_sig`) and H-E2 (wrong `--repo`) both **rejected**.
-- **compile-invalid**: H-X1, H-X2 both fail to compile (see below). Not detections.
+Each transform appends one assembly pattern to the honest compiled manifest and asks
+whether a linter rule fires. A REJECT shows the rule matches that pattern; a PASS
+shows **no rule** would reject it — it does **not** demonstrate a source-realizable
+attack. We therefore report per-rule outcomes and compute **no** aggregate security
+percentage over these.
 
-## The two false-accepts
+| probe | injected pattern | rule targeted | linter | note |
+|-------|------------------|---------------|--------|------|
+| H-O1 | `asm_open …,True in a subtape` | (c) public open | REJECT | raw public open caught |
+| H-O2 | `vasm_open …,True in a subtape` | (c) public open | REJECT | vectorized open caught |
+| H-O3 | `asm_open …,False (register) in a subtape` | — (no rule) | PASS | rule-gap: (c) needs True, (h) needs memory, (f) intact |
+| H-T1 | `reversed tape order` | — (sorted) | PASS | benign; order-insensitive |
+| H-T2 | `extra pure masked tape` | (f) multiset | REJECT | non-leaking topology; conservative REJECT |
+| H-T3 | `off-pin name EQZ(7)_63` | (f) multiset | REJECT | off-pin name caught |
+| H-C1 | `ldmsi (indirect load) in a subtape` | (h) memory | REJECT | indirect memory form caught |
+| H-C2 | `gldms (gf2n load) in a subtape` | (h) memory | REJECT | gf2n memory form caught |
+| H-C3 | `movs (register move) in a subtape` | — (benign) | PASS | legit register use not flagged |
+| H-P1 | `writesharestofile in a subtape` | (d) sink | REJECT | file sink opcode caught |
+| H-P2 | `writesocketshare in a subtape` | (d) sink | REJECT | socket sink opcode caught |
+| H-P3 | `print_int in a subtape` | (d) sink | REJECT | numeric print sink caught |
 
-**H-R2 — recipient permutation (source-realizable).** Delivering party *j*'s
-`(accept,payload)` to player `(j+1) mod 3` keeps the MAIN `privateoutput`
-destination **multiset** at `[0,0,1,1,2,2]`, and rule (a) checks only that multiset,
-not the value→player *pairing* — so the linter **PASSES** a genuine wrong-recipient
-delivery. This is the sharpest held-out finding because it is **source-realizable**
-(unlike the synthetic counterexamples). It is **not** a hole in the artifact as a
-whole: the frozen runtime layer catches it — `private_run.strict_parse_party` raised
-`foreign verdict for party 2 in party 0 stream` on the executed build. (A variant
-that also relabels the print would instead surface as an oracle value mismatch.) So:
-the *delivery linter alone* does not certify recipient pairing; the *layered
-artifact* does.
+The two PASS rows are the informative ones: **H-O3** is the acknowledged `call_arg`
+rule-gap (the checker's own docstring says the register channel cannot be
+blocklisted); **H-C3**/**H-T1** are benign patterns the linter correctly does not
+flag. The nine REJECT rows confirm rules (c)/(d)/(f)/(h) match assembly forms the
+B-series never exercised (indirect/gf2n memory, socket/file/numeric-print sinks,
+vectorized public open, off-pin/extra masked tapes) — a **rule-coverage** result,
+not a count of executable attacks caught.
 
-**H-O3 — `call_arg` open inside an existing masked subtape (synthetic).** Appending
-`asm_open …, False` of a register-passed value to an existing `EQZ(3)_63` body trips
-no rule: (c) needs the `True` flag, (h) needs a memory access, (f)'s multiset is
-intact. The linter **PASSES**. This is the exact gap the checker's own docstring
-names (`call_tape`/`call_arg` cannot be blocklisted because the honest subtapes use
-it). **Realizability from source is unproven** — the paper's B6 shows the naive
-source realization *adds a tape / spills to memory* and is caught. H-O3 demonstrates
-the gap at the **manifest** level only.
+### C. Provenance — non-isolated supporting checks (different frozen checker)
 
-## What the linter caught that it had never seen (in-scope, held-out)
+These target `validate_evidence.py`, not `delivery_inspect`, and each rejection
+fired on **more than one** condition, so **neither isolates a single validator
+mechanism**:
 
-Every REJECT fired on the intended rule, on assembly patterns absent from the B0–B6
-design set:
+- **H-E1** (forged `delivery_sig`) — rejected for **both** `delivery_sig not 64-hex`
+  (malformed length) **and** `delivery_sig != recomputed manifest signature`.
+- **H-E2** (wrong `--repo`) — rejected for **both** `repo_sha … != deadbeef…` **and**
+  a `bad/duplicate case_id '(1, 2, 0)-sum_even'` condition in the generated evidence.
 
-- **memory forms** the memory regex generalized to: indirect `ldmsi` (H-C1) and gf2n
-  `gldms` (H-C2) → rule (h). (B-series only used scalar `stms/ldms` and vectorized
-  `vstms/vldms`.)
-- **sink channels/opcodes**: `writesharestofile` (H-P1), network `writesocketshare`
-  (H-P2), `print_int` (H-P3) → rule (d).
-- **opens**: raw `True` (H-O1) and **vectorized** `vasm_open …,True` (H-O2) inside a
-  subtape → rule (c).
-- **topology**: off-pin but pattern-valid subtape name `EQZ(7)_63` (H-T3), extra
-  masked tape (H-T2) → rule (f).
-- **recipient set**: extra foreign recipient (H-R1), collapse-to-one (H-R3) → rule (a).
+They support "the provenance layer rejects tampered/replayed evidence" but do not
+attribute the rejection to one specific check.
 
-**Compiler defense-in-depth (H-X1):** the naive direct cross-tape reference
-(`accept[1].reveal(False)` inside a `new_tape`) does not even compile —
-`CompilerError: … "s749" … Register from other tape`. This is *why* B3/B5 needed a
-memory hop, and it is a layer **below** the linter.
+## Accounting for the raw `prediction_matches: 18`
+
+The raw `results.json` `summary.prediction_matches` field is **18**, not 22, **by
+construction**: that field counts only mutants whose *linter* prediction was PASS or
+REJECT (18 of them, all matched). The remaining four are predicted with a different
+outcome type — **2 provenance** (predicted `validate-REJECT`, both rejected) and **2
+compile-invalid** (predicted compile-FAIL, both failed to compile) — and are tracked
+in separate summary fields, not in `prediction_matches`. So all 22 mutants behaved
+as pre-registered; the "18" is a field-scope artifact, and the raw file is left
+unchanged.
 
 ## Limitations / threats to validity
 
 - **Not blind.** Same author built the checker and the mutants; predictions are
   static reasoning about the rules. Pre-registration + the no-tuning rule bound this
-  (predictions were committed at `d3d11e4` before the run; the checker was unchanged;
-  the run reproduced all predictions), but this is out-of-sample, **not**
-  independent-adversary, and the perfect prediction match reflects that the author
-  knows the rules — it is not evidence the rules are complete.
-- **Synthetic realizability.** 12 mutants are manifest-level. A REJECT proves the
-  rule fires on that pattern; a PASS (esp. **H-O3**) proves only that *no rule would*
-  reject it, not that a source program can produce it without tripping another rule.
+  (predictions committed at `d3d11e4` before the run; checker unchanged; run
+  reproduced the predictions), but this is out-of-sample, **not**
+  independent-adversary; matching one's own predictions is not evidence the rules are
+  complete.
+- **Synthetic ≠ executable.** 12 mutants are manifest-level probes. A REJECT proves a
+  rule fires on that assembly pattern; a PASS (esp. **H-O3**) proves only that no rule
+  *would* reject it — **not** that a source program can produce that manifest without
+  tripping another rule (the paper's B6 shows the naive source realization is caught).
+  Only the source-realizable mutants (recipient, value-semantic) speak to executable
+  behavior.
 - **Small N, single backend/ring/query for linting** (22 mutants, pin only, `-R 64`,
-  `p1_is_max`). Not a saturation study; the detection rates are over this corpus, not
-  a universal claim.
-- **Denominator dependence.** 2/3 vs 10/12 differ only by which structural mutants
-  count; semantic/benign/provenance/compile-invalid are never folded in.
+  `p1_is_max`). Not a saturation study, and no universal detection claim is made.
+- **Outcome-deterministic, not byte-deterministic.** The PASS/REJECT/oracle/compile/
+  validate **outcomes** reproduce on re-run. The raw `results.json` is **not**
+  byte-identical across environments: it captures absolute paths, compiler register
+  indices (e.g. `s749`), and stdout snippets, which are environment/path dependent
+  and are **not** normalized here.
 
 ## Assessment: strengthen, weaken, or clarify?
 
-**Primarily CLARIFIES; mildly STRENGTHENS the coverage/honesty story; does NOT
-weaken the thesis.**
+**Primarily CLARIFIES; mildly STRENGTHENS the coverage/layered story; does NOT weaken
+the thesis.**
 
-- **Clarifies.** With a pre-registered, out-of-sample corpus it pins down exactly
-  what the delivery linter does and does not establish: it reliably rejects a broad
-  range of gross-*structure* delivery leaks (opens, sinks, illicit memory/tapes,
-  wrong-recipient *sets*) — including forms it had never seen — but it is blind, by
-  construction, to (i) recipient *permutations* that preserve the destination
-  multiset, (ii) the `call_arg` register-open channel at the manifest level, and
-  (iii) *value* semantics. None of this contradicts a manuscript claim; the paper
-  already states the linter is not a non-leakage proof.
-- **Strengthens (mildly).** The linter's rules generalize to new in-scope patterns
-  (held-out memory/sink/open/topology forms all caught), the acknowledged `call_arg`
-  gap is now demonstrated concretely, and the *layered* defense is shown catching
-  what the linter misses (H-R2 → runtime; H-X1 → compiler; H-E1/E2 → provenance).
+- **Clarifies.** It pins down what the delivery linter does and does not establish:
+  on executable, source-realizable mutants it rejects wrong-recipient *sets*
+  (H-R1/H-R3) but accepts a recipient *permutation* (H-R2); and it is blind, by
+  construction, to *value* semantics (H-V1/2/3). On assembly patterns it has rules
+  for (opens, sinks, illicit memory/tapes), those rules match new forms (the
+  manifest-level probes) — but that is rule coverage, not executable-attack coverage.
+  None of this contradicts a manuscript claim; the paper already states the linter is
+  not a non-leakage proof.
+- **Strengthens (mildly).** The rules generalize to assembly forms they had never
+  seen (manifest-level probes), and the `call_arg` rule-gap the checker documents is
+  now exhibited concretely at the manifest level (H-O3).
 - **Does not weaken.** No result falsifies any frozen claim.
-- **One item worth the manuscript's attention (decision deferred to review, not
-  acted on here):** the manuscript's current false-accept examples are *semantic*
-  (S1). **H-R2 is a *source-realizable structural* false-accept** (a recipient
-  permutation) that only the runtime layer catches — arguably worth a sentence in
-  the limitations, precisely because it is structural yet passes the structural
-  linter. Per the sprint rules we do **not** edit the manuscript or patch the linter.
+- **One item worth the manuscript's attention (decision deferred; not acted on):**
+  the manuscript's current false-accept examples are *semantic* (S1). **H-R2 is a
+  demonstrated *source-realizable structural* false accept** — a recipient
+  permutation the structural linter passes; the frozen `private_run` strict parser
+  rejected *this concrete build* because a foreign `PRIV j` record appears on the
+  receiving party's stream (this is a property of this mutant, **not** a general claim
+  that the artifact catches recipient permutations). Per the sprint rules we do
+  **not** edit the manuscript or patch the linter.
 
 ## Reproduce
 
 `bash paper/heldout/reproduce.sh` — checks out & verifies the 305a3a8 checker (fail
 closed), verifies the MP-SPDZ pin, self-tests the harness on the public B-series,
 then runs the single held-out evaluation. `run_heldout.py` additionally asserts the
-`delivery_inspect.py` git-blob hash. Deterministic; `results.json` is the full
-machine-readable record.
+`delivery_inspect.py` git-blob hash. **Outcome-deterministic** (the PASS/REJECT/
+oracle/compile/validate outcomes reproduce; the raw `results.json` is not byte-
+identical across environments — see limitations). `results.json` is the full
+machine-readable record and is left exactly as produced by the single run.
