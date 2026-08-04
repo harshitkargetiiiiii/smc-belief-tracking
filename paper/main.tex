@@ -71,7 +71,7 @@ opcode/channel identity (operand/provenance-sensitive dataflow, typing, or a
 verified IR), which we did not evaluate. A pre-registered, out-of-sample mutation
 run against the frozen linter sharpens this boundary with a source-realizable
 \emph{structural} false accept: a multiset-preserving wrong-recipient delivery the
-linter passes and only a downstream transcript check catches. We do not claim
+linter passes and a downstream transcript check caught for that concrete build. We do not claim
 this principle is new --- that leakage is a dataflow rather than opcode-identity
 property is established for constant-time and smart-contract bytecode analysis; our
 contribution is the MPC-application instantiation, the pinned-backend mechanism, and
@@ -271,7 +271,8 @@ pseudo-oracle's visible outputs, payloads, and reconstructed weights. A
 per-party-scaled integer weights near the bit bound) all match the
 pseudo-oracle~\repo{coverage.py; results-coverage.txt}. This is a constructed test
 matrix, \emph{not} general coverage. The conformance package holds 92 tests --- 46
-functional and 46 delivery-gate/linter tests --- and 9 reference tests, all green;
+functional and 46 delivery-gate/linter tests --- and 9 reference test functions
+(25 collected items), all green;
 test counts are not themselves a result. Five committed executable negative controls
 are rejected by the linter (\S\ref{sec:mutation}). No timing is reported: the
 repository's older timings measure a different, non-conforming circuit and must not
@@ -280,7 +281,8 @@ be cited~\repo{README; docs/gap.md}.
 \subsection{Reproduction and cross-version replication}
 \label{sec:repro}
 The frozen artifact reproduces from a fresh checkout with a fresh build of the pinned
-MP-SPDZ backend: 117 collected \code{pytest} items, the named-case harness $4/4$, the
+MP-SPDZ backend: 117 collected \code{pytest} items (the 92 conformance items plus the
+9 reference test functions, which expand to 25), the named-case harness $4/4$, the
 $228$-case matrix $228/228$, the recomputed evidence, and the B4/B6/S1 reproductions
 all reproduce, and the normalized per-tape \code{manifest\_signature} values recompute
 to the archived detection-matrix values~\repo{paper/REPRODUCIBILITY.md}. We reproduce
@@ -304,9 +306,9 @@ mutations by the build-time adversary. We are explicit that this is a
 \emph{retrospective, adaptively discovered} sequence, not a complete or
 independently designed taxonomy: the checker was repeatedly hardened against the same
 mutations later used as evidence (adaptive overfitting), so this sequence itself
-yields no held-out estimate of detector effectiveness; we add a separate
-pre-registered, out-of-sample corpus for that purpose (\S\ref{sec:heldout},
-\S\ref{sec:threats}).
+yields no held-out estimate of detector effectiveness. We add a separate
+pre-registered corpus to probe the frozen checker's out-of-sample behaviour --- not
+to estimate detector effectiveness either (\S\ref{sec:heldout}, \S\ref{sec:threats}).
 
 \paragraph{Accounting.} One motivating transcript failure (\textbf{B0}); six
 compiled-delivery mutation cases (\textbf{B1--B6}); one semantic mutation
@@ -427,10 +429,11 @@ rule~(a) inspects. It is caught only downstream: the strict transcript parser
 claim the runtime layer catches recipient permutations in general. Three
 source-realizable \emph{semantic} mutants (negated accept, swapped accept/payload, a
 neighbour's payload) likewise pass the linter and fail the pseudo-oracle, echoing S1.
-Every remaining mutant is a \emph{manifest-level rule-coverage probe} --- a hand-built
-assembly pattern testing whether a rule fires, with \emph{unproven} source
-realizability, \emph{not} an executable attack, and excluded from any
-detector-efficacy denominator. The informative probe is H-O3: an \callarg{} open of a
+The remaining \emph{synthetic} mutants are \emph{manifest-level rule-coverage probes}
+--- hand-built assembly patterns testing whether a rule fires, with \emph{unproven}
+source realizability, \emph{not} executable attacks, and excluded from any
+detector-efficacy denominator (the corpus also contains provenance and
+compile-invalid cases, scored separately~\repo{paper/heldout/}). The informative probe is H-O3: an \callarg{} open of a
 register-passed value in an existing masked subtape that no current rule rejects ---
 the same gap B6 names (\S\ref{sec:b6}), now exhibited at the manifest
 level~\repo{paper/heldout/README.md}.
@@ -448,8 +451,9 @@ and smart-contract bytecode (\S\ref{sec:related}).
 applications):} adaptive linting of a security property can produce false
 confidence, and such tooling should print its assurance boundary; ours does~\repo{delivery\_inspect.py
 banner}.
-\item \textbf{Pinned-backend finding (backend/version specific):} MP-SPDZ's shared
-open instruction and the \calltape/\callarg{} path at \code{9d809599}, and the
+\item \textbf{Backend finding (backend-specific; observed at the pin \code{9d809599}
+and one additional version, v0.4.3, not version-independent):} MP-SPDZ's shared
+open instruction and the \calltape/\callarg{} path, and the
 consequence that the studied opcode-identity / channel-blocklist linter cannot be
 promoted to a general non-leakage checker (\calltape/\callarg{} cannot be
 blocklisted, since the honest build uses it).
@@ -469,13 +473,15 @@ no one of them a privacy proof. The pinned \emph{compiler} rejects one naive
 cross-tape transfer outright (a direct cross-tape register reference is a compile
 error, which is why a memory hop was needed; \S\ref{sec:heldout}). The \emph{delivery
 linter} rejects gross structural and channel classes --- public opens, illicit sinks,
-disallowed memory, off-pin tapes --- including forms outside its design set, yet H-R2
+disallowed memory, off-pin tapes --- including opcode/channel forms outside its design
+set (exercised as manifest-level probes, not executable source attacks), yet H-R2
 shows it misses a multiset-preserving wrong-recipient \emph{structure}. The
 \emph{runtime transcript check} caught that one concrete mutant; the
 \emph{pseudo-oracle} catches semantic mutations delivery-linting passes (S1 and the
 held-out semantic mutants); and \emph{evidence recomputation} protects the
-consistency and provenance of these records under the trusted CI. Each layer closes a
-class the previous one leaves open; none, alone or together, is the protocol-level
+consistency and provenance of these records under the trusted CI. In the tested
+examples, later layers catch some failures earlier checks leave open; the layers are
+complementary, not complete, and none, alone or together, is the protocol-level
 privacy proof the hand-off above still requires.
 
 % ===========================================================================
