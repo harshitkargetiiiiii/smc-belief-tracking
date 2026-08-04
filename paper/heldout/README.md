@@ -47,16 +47,17 @@ replaced afterward.
 
 ## Per-mutant: predicted vs actual
 
-`kind`: **source (exec)** = a real `.mpc` compiled and (where relevant) executed;
-**synthetic (manifest)** = a manifest-level transform that probes whether a rule
-fires on an assembly pattern (not a demonstrated executable attack);
+`kind`: **source** = a real `.mpc` compiled (H-R2 and H-V1–H-V3 are additionally
+**executed** at runtime; H-R1/H-R3 are classified by the linter alone, H-X1/H-X2
+fail to compile); **synthetic (manifest)** = a manifest-level transform that probes
+whether a rule fires on an assembly pattern (not a demonstrated executable attack);
 **provenance** = scored against `validate_evidence.py`.
 
 | ID | kind | category | predicted | actual | match |
 |----|------|----------|-----------|--------|:----:|
-| H-R1 | source (exec) | recipient | REJECT | REJECT | yes |
-| H-R2 | source (exec) | recipient | PASS | PASS / runtime-REJECT(this mutant) | yes |
-| H-R3 | source (exec) | recipient | REJECT | REJECT | yes |
+| H-R1 | source | recipient | REJECT | REJECT | yes |
+| H-R2 | source | recipient | PASS | PASS / runtime-REJECT(this mutant) | yes |
+| H-R3 | source | recipient | REJECT | REJECT | yes |
 | H-O1 | synthetic (manifest) | open | REJECT | REJECT | yes |
 | H-O2 | synthetic (manifest) | open | REJECT | REJECT | yes |
 | H-O3 | synthetic (manifest) | open | PASS | PASS | yes |
@@ -66,16 +67,16 @@ fires on an assembly pattern (not a demonstrated executable attack);
 | H-C1 | synthetic (manifest) | channel | REJECT | REJECT | yes |
 | H-C2 | synthetic (manifest) | channel | REJECT | REJECT | yes |
 | H-C3 | synthetic (manifest) | channel | PASS | PASS | yes |
-| H-V1 | source (exec) | value_semantic | PASS | PASS / oracle-FAIL | yes |
-| H-V2 | source (exec) | value_semantic | PASS | PASS / oracle-FAIL | yes |
-| H-V3 | source (exec) | value_semantic | PASS | PASS / oracle-FAIL | yes |
+| H-V1 | source | value_semantic | PASS | PASS / oracle-FAIL | yes |
+| H-V2 | source | value_semantic | PASS | PASS / oracle-FAIL | yes |
+| H-V3 | source | value_semantic | PASS | PASS / oracle-FAIL | yes |
 | H-P1 | synthetic (manifest) | transcript | REJECT | REJECT | yes |
 | H-P2 | synthetic (manifest) | transcript | REJECT | REJECT | yes |
 | H-P3 | synthetic (manifest) | transcript | REJECT | REJECT | yes |
 | H-E1 | provenance | provenance | validate-REJECT | validate=REJECT | yes |
 | H-E2 | provenance | provenance | validate-REJECT | validate=REJECT | yes |
-| H-X1 | source (exec) | compile_invalid | compile-FAIL | compile-FAIL | yes |
-| H-X2 | source (exec) | compile_invalid | compile-FAIL | compile-FAIL | yes |
+| H-X1 | source | compile_invalid | compile-FAIL | compile-FAIL | yes |
+| H-X2 | source | compile_invalid | compile-FAIL | compile-FAIL | yes |
 
 `runtime-REJECT(this mutant)` = the frozen `private_run` strict parser rejected
 **this specific** executed build (not a general property — see H-R2 below).
@@ -124,7 +125,7 @@ percentage over these.
 | H-P2 | `writesocketshare in a subtape` | (d) sink | REJECT | socket sink opcode caught |
 | H-P3 | `print_int in a subtape` | (d) sink | REJECT | numeric print sink caught |
 
-The two PASS rows are the informative ones: **H-O3** is the acknowledged `call_arg`
+The three PASS rows are the informative ones: **H-O3** is the acknowledged `call_arg`
 rule-gap (the checker's own docstring says the register channel cannot be
 blocklisted); **H-C3**/**H-T1** are benign patterns the linter correctly does not
 flag. The nine REJECT rows confirm rules (c)/(d)/(f)/(h) match assembly forms the
