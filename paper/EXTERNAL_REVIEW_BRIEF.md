@@ -6,6 +6,14 @@
 empty). This brief supersedes `docs/for-external-review.md` (which concerns the
 three earlier, already-refuted claims and is kept only for history).
 
+**Strengthening integration (already Codex-reviewed).** The manuscript now
+integrates two already-reviewed evidence passes: clean-room reproduction plus one
+cross-version replication (PR #7), and a pre-registered held-out mutation evaluation
+(PR #8). These add `paper/REPRODUCIBILITY.md`, `paper/CROSS_VERSION.md`, and
+`paper/heldout/`; the frozen artifact under `conformance/`, `mpc/`, `reference/`,
+`.github/` remains byte-unchanged from `305a3a8`. No new experiment, protocol,
+theorem, or performance result is added.
+
 ## What this is, in one paragraph
 
 A single-application **case study / experience report**. On one MP-SPDZ
@@ -72,6 +80,22 @@ where we most need you and cannot self-certify:
    "evidence self-consistency and recomputation", "no detected leak in the checked
    channels". Does any such statement still claim more than the evidence supports?
 
+7. **The held-out evaluation and the H-R2 structural false accept (§3.2, §4.3, §5).**
+   We report a *pre-registered, out-of-sample* mutation run (committed at `d3d11e4`
+   before results at `9e22007`; **not** independent-adversary) and, as its decisive
+   result, **H-R2**: a source-realizable delivery that passes the linter's
+   destination-player-multiset rule yet delivers a party's verdict to the *wrong*
+   recipient — a *structural* false accept, caught for this concrete build only by
+   the downstream transcript parser (a foreign `PRIV j` record). Is that
+   characterization exact? Is the *layered account* (compiler → linter → the H-R2
+   gap → transcript → pseudo-oracle → provenance, none a privacy proof) an accurate
+   description of the assurance, or does it imply coverage it lacks? We deliberately
+   do **not** claim the runtime layer catches recipient permutations in general, and
+   we treat every synthetic manifest mutant (e.g. H-O3, the `call_arg` open) only as
+   a rule-coverage probe with unproven source realizability — flag any place that
+   still reads as more. The cross-version replication (§3.2) is **two versions only**
+   (v0.4.3), explicitly not a compatibility or version-independence claim.
+
 ## Reproducible evidence you can check
 
 - **Detection matrix:** `paper/mutations/detection_matrix.json` (machine-readable) +
@@ -84,6 +108,13 @@ where we most need you and cannot self-certify:
   `paper/mutations/s1_runtime_evidence.json`.
 - **Linter:** `conformance/delivery_inspect.py` (rules a–h, with its own LINTER
   caveat banner). **Pinned backend:** MP-SPDZ `9d809599`.
+- **Strengthening evidence (PR #7 / #8):** clean-room reproduction
+  `paper/REPRODUCIBILITY.md` (normalized `manifest_signature` values recompute — not
+  raw bytes); one cross-version replication on MP-SPDZ v0.4.3 `26a60536`
+  `paper/CROSS_VERSION.md` (two versions, not a compatibility claim); the
+  pre-registered held-out evaluation `paper/heldout/` (`PLAN.md` predictions locked
+  at `d3d11e4` before results `9e22007`; `results.json` machine-readable; H-R2 is the
+  central new finding). A compact claim→evidence table is Appendix B of the paper.
 - **Literature positioning / novelty:** `paper/LITERATURE_REVIEW.md` — verdict
   *incremental*; the "leakage is dataflow, not opcode identity" principle is prior
   art (ct-verif, Binsec/Rel, Securify); closest MPC-specific work is the positive
@@ -109,6 +140,8 @@ privacy proof of the delivery mechanism.
 
 Correlated authorship + substantial AI assistance (model agreement is not
 independent validation); adaptive overfitting of the linter to the same mutations
-used as evidence, with no held-out set; a bounded (non-exhaustive) literature
-search; pseudo-oracle pseudo-independence; single-host, non-isolated harness; and
-no prior external replication. Please weigh these when judging the claims.
+used as evidence — now **partly mitigated** by a pre-registered out-of-sample corpus
+(§4.3) that is still **not** an independent-adversary evaluation; a bounded
+(non-exhaustive) literature search; pseudo-oracle pseudo-independence; single-host,
+non-isolated harness; cross-version evidence limited to two MP-SPDZ versions; and no
+prior external replication. Please weigh these when judging the claims.
