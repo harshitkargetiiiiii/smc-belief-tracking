@@ -1,0 +1,1016 @@
+{
+  "summary": {
+    "checker_baseline": {
+      "commit": "305a3a8d1810c427edcc32520352e74610c7866c",
+      "delivery_inspect_blob": "6ef7b6de4593b9a50e3a48e6136681f64423fda5",
+      "mpspdz_pin": "9d809599ea6ce627216a389ca7d984fbb75d0cb9",
+      "expected_subtapes": [
+        "EQZ(3)_63",
+        "EQZ(81)_63",
+        "LTZ(36)_64"
+      ]
+    },
+    "n_mutants": 22,
+    "prediction_matches": 18,
+    "prediction_mismatches": [],
+    "strict_denominator": {
+      "n": 3,
+      "rejected": 2,
+      "rate": 0.6666666666666666,
+      "false_accepts": [
+        "H-R2"
+      ]
+    },
+    "inclusive_denominator": {
+      "n": 12,
+      "rejected": 10,
+      "rate": 0.8333333333333334,
+      "false_accepts": [
+        "H-R2",
+        "H-O3"
+      ]
+    },
+    "semantic_out_of_scope": {
+      "ids": [
+        "H-V1",
+        "H-V2",
+        "H-V3"
+      ],
+      "linter_pass": [
+        "H-V1",
+        "H-V2",
+        "H-V3"
+      ],
+      "oracle_fail": [
+        "H-V1",
+        "H-V2",
+        "H-V3"
+      ]
+    },
+    "benign": {
+      "correct_accept": [
+        "H-T1",
+        "H-C3"
+      ],
+      "false_reject": [
+        "H-T2"
+      ]
+    },
+    "compile_invalid": [
+      "H-X1",
+      "H-X2"
+    ],
+    "compile_invalid_actual": [
+      "H-X1",
+      "H-X2"
+    ],
+    "provenance": {
+      "H-E1": true,
+      "H-E2": true
+    },
+    "runtime_layer_rejects": [
+      "H-R2"
+    ]
+  },
+  "results": [
+    {
+      "id": "H-R1",
+      "category": "recipient",
+      "kind": "source",
+      "title": "extra foreign recipient",
+      "genuine_violation": true,
+      "realizable": "source",
+      "predicted_compile": "valid",
+      "predicted_linter": "REJECT",
+      "predicted_rule": "(a) main privateoutput player multiset != [0,0,1,1,2,2]",
+      "oracle_needed": false,
+      "bucket": "structural_security",
+      "denominator": "strict",
+      "compile": "valid",
+      "linter": "REJECT",
+      "linter_reasons": [
+        "main privateoutput players [0, 0, 1, 1, 1, 2, 2] != [0,0,1,1,2,2]"
+      ],
+      "manifest_signature": "14f4e7712bbe814f503986dd39ff4bf3a68582edda5de7d6d9757da5311804f6"
+    },
+    {
+      "id": "H-R2",
+      "category": "recipient",
+      "kind": "source",
+      "title": "recipient permutation (multiset-preserving)",
+      "genuine_violation": true,
+      "realizable": "source",
+      "predicted_compile": "valid",
+      "predicted_linter": "PASS",
+      "predicted_rule": null,
+      "oracle_needed": true,
+      "bucket": "structural_security",
+      "denominator": "strict",
+      "compile": "valid",
+      "linter": "PASS",
+      "linter_reasons": [],
+      "manifest_signature": "bb98c418b27342f00423ac4ee777156790da6aa5d2701d69b103d59f6346fe9b",
+      "oracle_fail": false,
+      "runtime_layer_reject": true,
+      "runtime_detail": [
+        {
+          "case": [
+            [
+              0,
+              0,
+              1
+            ],
+            "sum_even"
+          ],
+          "runtime_reject": "party 0: foreign verdict for party 2 in party 0 stream",
+          "oracle_mismatch": []
+        },
+        {
+          "case": [
+            [
+              0,
+              0,
+              1
+            ],
+            "p1_is_max"
+          ],
+          "runtime_reject": "party 0: foreign verdict for party 2 in party 0 stream",
+          "oracle_mismatch": []
+        },
+        {
+          "case": [
+            [
+              2,
+              0,
+              0
+            ],
+            "p1_is_max"
+          ],
+          "runtime_reject": "party 0: foreign verdict for party 2 in party 0 stream",
+          "oracle_mismatch": []
+        },
+        {
+          "case": [
+            [
+              1,
+              2,
+              0
+            ],
+            "sum_even"
+          ],
+          "runtime_reject": "party 0: foreign verdict for party 2 in party 0 stream",
+          "oracle_mismatch": []
+        },
+        {
+          "case": [
+            [
+              0,
+              0,
+              0
+            ],
+            "p1_is_max"
+          ],
+          "runtime_reject": "party 0: foreign verdict for party 2 in party 0 stream",
+          "oracle_mismatch": []
+        }
+      ]
+    },
+    {
+      "id": "H-R3",
+      "category": "recipient",
+      "kind": "source",
+      "title": "recipient collapse to one player",
+      "genuine_violation": true,
+      "realizable": "source",
+      "predicted_compile": "valid",
+      "predicted_linter": "REJECT",
+      "predicted_rule": "(a) main privateoutput player multiset [0,0,0,0,0,0] != pinned",
+      "oracle_needed": false,
+      "bucket": "structural_security",
+      "denominator": "strict",
+      "compile": "valid",
+      "linter": "REJECT",
+      "linter_reasons": [
+        "main privateoutput players [0, 0, 0, 0, 0, 0] != [0,0,1,1,2,2]"
+      ],
+      "manifest_signature": "f6e0b99c5657bf1164864318aad2e58384b67e18765529fc291cdb3c1f13b672"
+    },
+    {
+      "id": "H-O1",
+      "category": "open",
+      "kind": "synthetic",
+      "title": "public open (True) inside an existing subtape via register",
+      "genuine_violation": true,
+      "realizable": "synthetic-manifest",
+      "predicted_compile": "n/a",
+      "predicted_linter": "REJECT",
+      "predicted_rule": "(c) public open-to-all in a tape",
+      "oracle_needed": false,
+      "bucket": "structural_security",
+      "denominator": "inclusive",
+      "compile": "n/a",
+      "linter": "REJECT",
+      "linter_reasons": [
+        "public open-to-all (reveal) in tape EQZ(3)_63: ['asm_open 3, True, c99, s99']"
+      ],
+      "manifest_signature": "baf0db7b2269dda46e345251e20908967304b686f8a36d85efdbe8efa1ff68b6"
+    },
+    {
+      "id": "H-O2",
+      "category": "open",
+      "kind": "synthetic",
+      "title": "vectorized public open (True) inside a subtape via register",
+      "genuine_violation": true,
+      "realizable": "synthetic-manifest",
+      "predicted_compile": "n/a",
+      "predicted_linter": "REJECT",
+      "predicted_rule": "(c) public open-to-all (vectorized) in a tape",
+      "oracle_needed": false,
+      "bucket": "structural_security",
+      "denominator": "inclusive",
+      "compile": "n/a",
+      "linter": "REJECT",
+      "linter_reasons": [
+        "public open-to-all (reveal) in tape EQZ(81)_63: ['vasm_open 3, True, c99, s99']"
+      ],
+      "manifest_signature": "da0e77946febd98ed5e4c54d20b5ad0f43724869a5ecd9aa85080db243b96e05"
+    },
+    {
+      "id": "H-O3",
+      "category": "open",
+      "kind": "synthetic",
+      "title": "open(False) of a register-passed value inside a masked subtape",
+      "genuine_violation": true,
+      "realizable": "synthetic-manifest",
+      "predicted_compile": "n/a",
+      "predicted_linter": "PASS",
+      "predicted_rule": null,
+      "oracle_needed": false,
+      "bucket": "structural_security",
+      "denominator": "inclusive",
+      "compile": "n/a",
+      "linter": "PASS",
+      "linter_reasons": [],
+      "manifest_signature": "06e60e1ebc58d8478ff4b5438b5e395bf50eac53f1aab0257f4a592b34c5ce5a"
+    },
+    {
+      "id": "H-T1",
+      "category": "topology",
+      "kind": "synthetic",
+      "title": "benign subtape reordering",
+      "genuine_violation": false,
+      "realizable": "synthetic-manifest",
+      "predicted_compile": "n/a",
+      "predicted_linter": "PASS",
+      "predicted_rule": null,
+      "oracle_needed": false,
+      "bucket": "benign",
+      "denominator": "none",
+      "compile": "n/a",
+      "linter": "PASS",
+      "linter_reasons": [],
+      "manifest_signature": "715b006b11c3067c38502b2294abe9490a2ceeedbbe30661741f008fa8566192"
+    },
+    {
+      "id": "H-T2",
+      "category": "topology",
+      "kind": "synthetic",
+      "title": "extra well-formed masked tape (benign bloat)",
+      "genuine_violation": false,
+      "realizable": "synthetic-manifest",
+      "predicted_compile": "n/a",
+      "predicted_linter": "REJECT",
+      "predicted_rule": "(f) non-main tape multiset gains EQZ(3)_63",
+      "oracle_needed": false,
+      "bucket": "benign",
+      "denominator": "none",
+      "compile": "n/a",
+      "linter": "REJECT",
+      "linter_reasons": [
+        "non-main tape multiset ['EQZ(3)_63', 'EQZ(3)_63', 'EQZ(81)_63', 'LTZ(36)_64'] != pinned ['EQZ(3)_63', 'EQZ(81)_63', 'LTZ(36)_64']"
+      ],
+      "manifest_signature": "21dbf6e38b6e67769da460f89b293635c9eafc600c0f16ba433157b94e12f67b"
+    },
+    {
+      "id": "H-T3",
+      "category": "topology",
+      "kind": "synthetic",
+      "title": "off-pin but pattern-valid subtape name",
+      "genuine_violation": true,
+      "realizable": "synthetic-manifest",
+      "predicted_compile": "n/a",
+      "predicted_linter": "REJECT",
+      "predicted_rule": "(f) multiset {EQZ(3)_63,EQZ(7)_63,LTZ(36)_64} != pinned",
+      "oracle_needed": false,
+      "bucket": "structural_security",
+      "denominator": "inclusive",
+      "compile": "n/a",
+      "linter": "REJECT",
+      "linter_reasons": [
+        "non-main tape multiset ['EQZ(3)_63', 'EQZ(7)_63', 'LTZ(36)_64'] != pinned ['EQZ(3)_63', 'EQZ(81)_63', 'LTZ(36)_64']"
+      ],
+      "manifest_signature": "eee5478583d669a455b2798c66e3f819d5d2fefafea6ed143976d0eb980ea6c0"
+    },
+    {
+      "id": "H-C1",
+      "category": "channel",
+      "kind": "synthetic",
+      "title": "indirect memory access inside a subtape",
+      "genuine_violation": true,
+      "realizable": "synthetic-manifest",
+      "predicted_compile": "n/a",
+      "predicted_linter": "REJECT",
+      "predicted_rule": "(h) non-main tape accesses memory",
+      "oracle_needed": false,
+      "bucket": "structural_security",
+      "denominator": "inclusive",
+      "compile": "n/a",
+      "linter": "REJECT",
+      "linter_reasons": [
+        "non-main tape LTZ(36)_64 accesses memory (verdict exfil path): ['ldmsi si9, ci9']"
+      ],
+      "manifest_signature": "f263c198be660454e7577cf494f1254c9c8f3587a1e4fd62b6f02e10d3eaa21f"
+    },
+    {
+      "id": "H-C2",
+      "category": "channel",
+      "kind": "synthetic",
+      "title": "GF2n memory access inside a subtape",
+      "genuine_violation": true,
+      "realizable": "synthetic-manifest",
+      "predicted_compile": "n/a",
+      "predicted_linter": "REJECT",
+      "predicted_rule": "(h) non-main tape accesses memory (g? prefix)",
+      "oracle_needed": false,
+      "bucket": "structural_security",
+      "denominator": "inclusive",
+      "compile": "n/a",
+      "linter": "REJECT",
+      "linter_reasons": [
+        "non-main tape LTZ(36)_64 accesses memory (verdict exfil path): ['gldms sg9, 4000']"
+      ],
+      "manifest_signature": "51f496307b816d52b1764e14ecf79c55cd19f718f53b0ba5ca9899cbbf940cc9"
+    },
+    {
+      "id": "H-C3",
+      "category": "channel",
+      "kind": "synthetic",
+      "title": "legitimate call_arg register use (no open)",
+      "genuine_violation": false,
+      "realizable": "synthetic-manifest",
+      "predicted_compile": "n/a",
+      "predicted_linter": "PASS",
+      "predicted_rule": null,
+      "oracle_needed": false,
+      "bucket": "benign",
+      "denominator": "none",
+      "compile": "n/a",
+      "linter": "PASS",
+      "linter_reasons": [],
+      "manifest_signature": "6dfa3448d35d7bd686105e2dfb749712c1cbec187fbb66359e756dd701ed4eff"
+    },
+    {
+      "id": "H-V1",
+      "category": "value_semantic",
+      "kind": "source",
+      "title": "negated accept predicate",
+      "genuine_violation": true,
+      "realizable": "source",
+      "predicted_compile": "valid",
+      "predicted_linter": "PASS",
+      "predicted_rule": null,
+      "oracle_needed": true,
+      "bucket": "semantic_out_of_scope",
+      "denominator": "none",
+      "compile": "valid",
+      "linter": "PASS",
+      "linter_reasons": [],
+      "manifest_signature": "833e7951a95c0b8dce6ee3832b4a642044de1845ce7550ab13261c3811d280a4",
+      "oracle_fail": true,
+      "runtime_layer_reject": false,
+      "runtime_detail": [
+        {
+          "case": [
+            [
+              0,
+              0,
+              1
+            ],
+            "sum_even"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": [
+            {
+              "party": 0,
+              "got": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              },
+              "oracle": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              }
+            },
+            {
+              "party": 1,
+              "got": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              },
+              "oracle": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              }
+            },
+            {
+              "party": 2,
+              "got": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              },
+              "oracle": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              }
+            }
+          ]
+        },
+        {
+          "case": [
+            [
+              0,
+              0,
+              1
+            ],
+            "p1_is_max"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": [
+            {
+              "party": 0,
+              "got": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              },
+              "oracle": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              }
+            },
+            {
+              "party": 1,
+              "got": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              },
+              "oracle": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              }
+            },
+            {
+              "party": 2,
+              "got": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              },
+              "oracle": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              }
+            }
+          ]
+        },
+        {
+          "case": [
+            [
+              2,
+              0,
+              0
+            ],
+            "p1_is_max"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": [
+            {
+              "party": 0,
+              "got": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              },
+              "oracle": {
+                "ACCEPT": 1,
+                "PAYLOAD": 1
+              }
+            },
+            {
+              "party": 1,
+              "got": {
+                "ACCEPT": 1,
+                "PAYLOAD": 1
+              },
+              "oracle": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              }
+            },
+            {
+              "party": 2,
+              "got": {
+                "ACCEPT": 1,
+                "PAYLOAD": 1
+              },
+              "oracle": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              }
+            }
+          ]
+        },
+        {
+          "case": [
+            [
+              1,
+              2,
+              0
+            ],
+            "sum_even"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": [
+            {
+              "party": 0,
+              "got": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              },
+              "oracle": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              }
+            },
+            {
+              "party": 1,
+              "got": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              },
+              "oracle": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              }
+            },
+            {
+              "party": 2,
+              "got": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              },
+              "oracle": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              }
+            }
+          ]
+        },
+        {
+          "case": [
+            [
+              0,
+              0,
+              0
+            ],
+            "p1_is_max"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": [
+            {
+              "party": 0,
+              "got": {
+                "ACCEPT": 1,
+                "PAYLOAD": 1
+              },
+              "oracle": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              }
+            },
+            {
+              "party": 1,
+              "got": {
+                "ACCEPT": 1,
+                "PAYLOAD": 1
+              },
+              "oracle": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              }
+            },
+            {
+              "party": 2,
+              "got": {
+                "ACCEPT": 1,
+                "PAYLOAD": 1
+              },
+              "oracle": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H-V2",
+      "category": "value_semantic",
+      "kind": "source",
+      "title": "swapped accept/payload values",
+      "genuine_violation": true,
+      "realizable": "source",
+      "predicted_compile": "valid",
+      "predicted_linter": "PASS",
+      "predicted_rule": null,
+      "oracle_needed": true,
+      "bucket": "semantic_out_of_scope",
+      "denominator": "none",
+      "compile": "valid",
+      "linter": "PASS",
+      "linter_reasons": [],
+      "manifest_signature": "93b5e92c693973f5dc734aaae8464a76011d8b5acd9cc17c0d42f6f7057374e6",
+      "oracle_fail": true,
+      "runtime_layer_reject": false,
+      "runtime_detail": [
+        {
+          "case": [
+            [
+              0,
+              0,
+              1
+            ],
+            "sum_even"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": [
+            {
+              "party": 0,
+              "got": {
+                "ACCEPT": 0,
+                "PAYLOAD": 1
+              },
+              "oracle": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              }
+            },
+            {
+              "party": 1,
+              "got": {
+                "ACCEPT": 0,
+                "PAYLOAD": 1
+              },
+              "oracle": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              }
+            },
+            {
+              "party": 2,
+              "got": {
+                "ACCEPT": 0,
+                "PAYLOAD": 1
+              },
+              "oracle": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              }
+            }
+          ]
+        },
+        {
+          "case": [
+            [
+              0,
+              0,
+              1
+            ],
+            "p1_is_max"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": []
+        },
+        {
+          "case": [
+            [
+              2,
+              0,
+              0
+            ],
+            "p1_is_max"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": []
+        },
+        {
+          "case": [
+            [
+              1,
+              2,
+              0
+            ],
+            "sum_even"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": [
+            {
+              "party": 0,
+              "got": {
+                "ACCEPT": 0,
+                "PAYLOAD": 1
+              },
+              "oracle": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              }
+            },
+            {
+              "party": 1,
+              "got": {
+                "ACCEPT": 0,
+                "PAYLOAD": 1
+              },
+              "oracle": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              }
+            },
+            {
+              "party": 2,
+              "got": {
+                "ACCEPT": 0,
+                "PAYLOAD": 1
+              },
+              "oracle": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              }
+            }
+          ]
+        },
+        {
+          "case": [
+            [
+              0,
+              0,
+              0
+            ],
+            "p1_is_max"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": []
+        }
+      ]
+    },
+    {
+      "id": "H-V3",
+      "category": "value_semantic",
+      "kind": "source",
+      "title": "neighbor payload value leak",
+      "genuine_violation": true,
+      "realizable": "source",
+      "predicted_compile": "valid",
+      "predicted_linter": "PASS",
+      "predicted_rule": null,
+      "oracle_needed": true,
+      "bucket": "semantic_out_of_scope",
+      "denominator": "none",
+      "compile": "valid",
+      "linter": "PASS",
+      "linter_reasons": [],
+      "manifest_signature": "ecd1cb6c978d47620f64f903eeeb4e3fa9681f370fb91e95469409023258ef3e",
+      "oracle_fail": true,
+      "runtime_layer_reject": false,
+      "runtime_detail": [
+        {
+          "case": [
+            [
+              0,
+              0,
+              1
+            ],
+            "sum_even"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": []
+        },
+        {
+          "case": [
+            [
+              0,
+              0,
+              1
+            ],
+            "p1_is_max"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": []
+        },
+        {
+          "case": [
+            [
+              2,
+              0,
+              0
+            ],
+            "p1_is_max"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": [
+            {
+              "party": 0,
+              "got": {
+                "ACCEPT": 1,
+                "PAYLOAD": 0
+              },
+              "oracle": {
+                "ACCEPT": 1,
+                "PAYLOAD": 1
+              }
+            },
+            {
+              "party": 2,
+              "got": {
+                "ACCEPT": 0,
+                "PAYLOAD": 1
+              },
+              "oracle": {
+                "ACCEPT": 0,
+                "PAYLOAD": 0
+              }
+            }
+          ]
+        },
+        {
+          "case": [
+            [
+              1,
+              2,
+              0
+            ],
+            "sum_even"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": []
+        },
+        {
+          "case": [
+            [
+              0,
+              0,
+              0
+            ],
+            "p1_is_max"
+          ],
+          "runtime_reject": null,
+          "oracle_mismatch": []
+        }
+      ]
+    },
+    {
+      "id": "H-P1",
+      "category": "transcript",
+      "kind": "synthetic",
+      "title": "write-to-file sink in a subtape",
+      "genuine_violation": true,
+      "realizable": "synthetic-manifest",
+      "predicted_compile": "n/a",
+      "predicted_linter": "REJECT",
+      "predicted_rule": "(d) file/socket/print sink in a tape",
+      "oracle_needed": false,
+      "bucket": "structural_security",
+      "denominator": "inclusive",
+      "compile": "n/a",
+      "linter": "REJECT",
+      "linter_reasons": [
+        "output/exfil opcode in non-main tape EQZ(3)_63: ['writesharestofile s9, 0']"
+      ],
+      "manifest_signature": "117ed5d393e88121e1dea681b8963c81c0efafc29c52b07bc721587201182ab4"
+    },
+    {
+      "id": "H-P2",
+      "category": "transcript",
+      "kind": "synthetic",
+      "title": "write-to-socket (network) sink in a subtape",
+      "genuine_violation": true,
+      "realizable": "synthetic-manifest",
+      "predicted_compile": "n/a",
+      "predicted_linter": "REJECT",
+      "predicted_rule": "(d) writesocket* sink in a tape",
+      "oracle_needed": false,
+      "bucket": "structural_security",
+      "denominator": "inclusive",
+      "compile": "n/a",
+      "linter": "REJECT",
+      "linter_reasons": [
+        "output/exfil opcode in non-main tape LTZ(36)_64: ['writesocketshare 0, 0, 1, s9']"
+      ],
+      "manifest_signature": "134cd014a1079360d627f66c9103829e5bebc84db6233521c17e2fb094b8758c"
+    },
+    {
+      "id": "H-P3",
+      "category": "transcript",
+      "kind": "synthetic",
+      "title": "numeric cleartext print in a subtape",
+      "genuine_violation": true,
+      "realizable": "synthetic-manifest",
+      "predicted_compile": "n/a",
+      "predicted_linter": "REJECT",
+      "predicted_rule": "(d) print_int* sink in a tape",
+      "oracle_needed": false,
+      "bucket": "structural_security",
+      "denominator": "inclusive",
+      "compile": "n/a",
+      "linter": "REJECT",
+      "linter_reasons": [
+        "output/exfil opcode in non-main tape EQZ(81)_63: ['print_int ci9']"
+      ],
+      "manifest_signature": "4d92a96d6b1481e77181ec631e4d8231ec0d498d975d0f9484633a167319245d"
+    },
+    {
+      "id": "H-E1",
+      "category": "provenance",
+      "kind": "provenance",
+      "title": "forged delivery signature in an evidence record",
+      "genuine_violation": true,
+      "realizable": "provenance",
+      "predicted_compile": "n/a",
+      "predicted_linter": "n/a",
+      "predicted_rule": "validate_evidence --recompute rejects (recomputed sig != stored)",
+      "oracle_needed": false,
+      "bucket": "provenance_other_checker",
+      "denominator": "none",
+      "compile": "n/a",
+      "linter": "n/a (targets validate_evidence.py)",
+      "validate_evidence_rejected": true,
+      "validate_detail": {
+        "returncode": 1,
+        "stdout": "EVIDENCE INVALID: /home/claude/heldout/_prov_forged.jsonl\n   /home/claude/heldout/_prov_forged.jsonl[0]: delivery_sig not 64-hex\n   /home/claude/heldout/_prov_forged.jsonl[0]: delivery_sig != recomputed manifest signature"
+      }
+    },
+    {
+      "id": "H-E2",
+      "category": "provenance",
+      "kind": "provenance",
+      "title": "evidence replayed under a wrong repo SHA",
+      "genuine_violation": true,
+      "realizable": "provenance",
+      "predicted_compile": "n/a",
+      "predicted_linter": "n/a",
+      "predicted_rule": "validate_evidence rejects (record repo_sha != --repo)",
+      "oracle_needed": false,
+      "bucket": "provenance_other_checker",
+      "denominator": "none",
+      "compile": "n/a",
+      "linter": "n/a (targets validate_evidence.py)",
+      "validate_evidence_rejected": true,
+      "validate_detail": {
+        "returncode": 1,
+        "stdout": "c32520352e74610c7866c != deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n   /home/claude/heldout/_prov_evidence.jsonl[7]: bad/duplicate case_id '(1, 2, 0)-sum_even'\n   /home/claude/heldout/_prov_evidence.jsonl[7]: repo_sha 305a3a8d1810c427edcc32520352e74610c7866c != deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+      }
+    },
+    {
+      "id": "H-X1",
+      "category": "compile_invalid",
+      "kind": "source",
+      "title": "direct cross-tape register reference",
+      "genuine_violation": true,
+      "realizable": "source(compile-fail)",
+      "predicted_compile": "invalid",
+      "predicted_linter": "n/a",
+      "predicted_rule": "MP-SPDZ compiler: 'Register from other tape'",
+      "oracle_needed": false,
+      "bucket": "compile_invalid",
+      "denominator": "none",
+      "compile": "invalid",
+      "compile_error": "on: %s'\nCompiler.exceptions.CompilerError: Invalid argument 2 \"s749\" to instruction: asm_open 3, False, c0, s749\nRegister from other tape, trace: <omitted>\nMaybe use MemValue\nDefault bit length for compilation: 63\nDefault security parameter for compilation: 40\nCompiling file Programs/Source/H_X1.mpc",
+      "linter": "n/a"
+    },
+    {
+      "id": "H-X2",
+      "category": "compile_invalid",
+      "kind": "source",
+      "title": "undefined symbol",
+      "genuine_violation": false,
+      "realizable": "source(compile-fail)",
+      "predicted_compile": "invalid",
+      "predicted_linter": "n/a",
+      "predicted_rule": "MP-SPDZ compiler: NameError",
+      "oracle_needed": false,
+      "bucket": "compile_invalid",
+      "denominator": "none",
+      "compile": "invalid",
+      "compile_error": "\"Programs/Source/H_X2.mpc\", line 75, in <module>\n    _bogus = undefined_symbol_xyz + 1\n             ^^^^^^^^^^^^^^^^^^^^\nNameError: name 'undefined_symbol_xyz' is not defined\nDefault bit length for compilation: 63\nDefault security parameter for compilation: 40\nCompiling file Programs/Source/H_X2.mpc",
+      "linter": "n/a"
+    }
+  ]
+}
