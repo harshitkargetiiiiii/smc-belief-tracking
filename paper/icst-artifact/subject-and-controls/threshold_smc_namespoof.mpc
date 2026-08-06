@@ -1,0 +1,87 @@
+# INTENTIONALLY LEAKY sibling #3 (negative control): the MAIN tape is the private
+# build, but a SEPARATE tape -- named `EQZ(spoof)` via program.new_tape(name=...)
+# so its compiled kind matches the OLD name-only allowlist regex `(EQZ|LTZ)\(` --
+# delivers party 1's SECRET verdict to the WRONG player (player 0) via
+# `privateoutput` and writes it to a file via `binary_output()` (`intoutput`).
+#
+# This reproduces the re-review-3 CRITICAL bypass: the old inspector trusted tape
+# NAMES for the masked allowlist and only parsed the MAIN tape for privateoutput
+# players, so this passed silently across all three layers (the exfil is a file,
+# not stdout). The CONTENT-based inspector (conformance/delivery_inspect.py)
+# REJECTS it: privateoutput in a non-main tape, an output sink in a non-main tape,
+# and a non-`^(EQZ|LTZ)\(\d+\)_\d+$` tape name.
+#
+# Same computation, inputs, and query interface as threshold_smc_private.mpc.
+
+Q = program.args[1] if len(program.args) > 1 else 'p1_is_max'
+D = [0, 1, 2]
+N = 3
+S = 27
+A, B = 1, 2
+
+
+def state(idx):
+    return (idx // 9, (idx // 3) % 3, idx % 3)
+
+
+def qval(s):
+    x0, x1, x2 = s
+    if Q == 'p1_is_max':
+        return int(x0 >= x1 and x0 >= x2)
+    if Q == 'sum_even':
+        return int((x0 + x1 + x2) % 2 == 0)
+    raise Exception('unknown query: ' + Q)
+
+
+QV = [qval(state(i)) for i in range(S)]
+OQ = sorted(set(QV))
+
+sj = [None] * N
+delta = [[None] * S for _ in range(N)]
+for j in range(N):
+    sj[j] = sint.get_input_from(j)
+    for idx in range(S):
+        delta[j][idx] = sint.get_input_from(j)
+
+o_actual = sint(0)
+for idx in range(S):
+    x0, x1, x2 = state(idx)
+    onehot = (sj[0] == x0) * (sj[1] == x1) * (sj[2] == x2)
+    o_actual = o_actual + QV[idx] * onehot
+
+accept = [None] * N
+payload = [None] * N
+for j in range(N):
+    viol = sint(0)
+    for i in range(N):
+        if i == j:
+            continue
+        for o in OQ:
+            Z = sum((delta[j][idx] for idx in range(S) if QV[idx] == o), sint(0))
+            for n in D:
+                M = sum((delta[j][idx] for idx in range(S)
+                         if QV[idx] == o and state(idx)[i] == n), sint(0))
+                viol = viol + (A * Z < B * M)
+    accept[j] = (viol == 0)
+    payload[j] = accept[j].if_else(o_actual, 0)
+
+
+# ---- the hidden leak: a name-spoofed tape exfiltrating party 1's verdict ----
+for j in range(N):
+    accept[j].store_in_mem(2000 + j)
+    payload[j].store_in_mem(2100 + j)
+
+
+def _exfil():
+    a1 = sint.load_mem(2001)          # party 1's SECRET accept
+    p1 = sint.load_mem(2101)          # party 1's SECRET payload
+    a1.reveal_to(0).binary_output()   # privateoutput -> player 0 (WRONG) + file
+    p1.reveal_to(0).binary_output()
+
+
+program.run_tapes([program.new_tape(_exfil, name='EQZ(spoof)')])
+
+# ---- MAIN tape: identical private delivery to threshold_smc_private.mpc ----
+for j in range(N):
+    print_ln_to(j, 'PRIV %s ACCEPT %s', j, accept[j].reveal_to(j))
+    print_ln_to(j, 'PRIV %s PAYLOAD %s', j, payload[j].reveal_to(j))

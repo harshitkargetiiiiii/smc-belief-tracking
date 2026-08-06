@@ -1,0 +1,92 @@
+# Smallest threshold_SMC circuit (PLAS 2012 SMC belief tracking), deterministic
+# query, N=3, domain {0,1,2}, t_i=1/2, 64-bit signed ring. Specialized to ONE
+# public query given as a compile argument (currently two hard-coded query
+# tables; NOT a general public-query compiler). Implements INTERFACE.md:
+#   - public alphabet O_Q iteration, b*M <= a*Z (a=1,b=2), no division
+#   - computes recipient-indexed (accept_j, payload_j); payload masked to 0 on
+#     reject. Private DELIVERY is NOT implemented: this build BROADCASTS every
+#     verdict/payload/weight via reveal() so the harness can reconstruct. That
+#     broadcast is a gross, TEST-ONLY leak (a Sec 4.4 violation) and must be
+#     replaced by per-recipient private output before any privacy claim.
+#   - accepted belief filtered by actual output; rejected belief value unchanged
+#     (share identity/freshness NOT established — see NOTES.md).
+#
+# No optimization, no benchmarking, no security claim. Correctness is checked by
+# harness.py / coverage.py against the independent plaintext oracle.
+
+Q = program.args[1] if len(program.args) > 1 else 'p1_is_max'
+D = [0, 1, 2]
+N = 3
+S = 27                                   # |D|^N, dense lexicographic
+A, B = 1, 2                              # threshold 1/2 = A/B
+
+
+def state(idx):
+    return (idx // 9, (idx // 3) % 3, idx % 3)
+
+
+def qval(s):
+    x0, x1, x2 = s
+    if Q == 'p1_is_max':
+        return int(x0 >= x1 and x0 >= x2)
+    if Q == 'sum_even':
+        return int((x0 + x1 + x2) % 2 == 0)
+    raise Exception('unknown query: ' + Q)
+
+
+QV = [qval(state(i)) for i in range(S)]          # public
+OQ = sorted(set(QV))                             # public alphabet
+
+# ---- runtime secret inputs: party j gives s_j then its 27 weights ----
+sj = [None] * N
+delta = [[None] * S for _ in range(N)]
+for j in range(N):
+    sj[j] = sint.get_input_from(j)
+    for idx in range(S):
+        delta[j][idx] = sint.get_input_from(j)
+
+# ---- actual output o = Q(secrets), via secret one-hot over the 27 states ----
+o_actual = sint(0)
+for idx in range(S):
+    x0, x1, x2 = state(idx)
+    onehot = (sj[0] == x0) * (sj[1] == x1) * (sj[2] == x2)   # secret 0/1
+    o_actual = o_actual + QV[idx] * onehot                   # public * secret
+
+# keep[idx] = [Q(state idx) == o_actual]  (public constant vs secret)
+keep = [(o_actual == QV[idx]) for idx in range(S)]
+
+# ---- per-recipient tcheck over the PUBLIC alphabet, all protected values ----
+accept = [None] * N
+payload = [None] * N
+for j in range(N):
+    viol = sint(0)
+    for i in range(N):
+        if i == j:
+            continue
+        for o in OQ:
+            # Z, M are secret sums selected by a PUBLIC predicate (no mults)
+            Z = sum((delta[j][idx] for idx in range(S) if QV[idx] == o), sint(0))
+            for n in D:
+                M = sum((delta[j][idx] for idx in range(S)
+                         if QV[idx] == o and state(idx)[i] == n), sint(0))
+                # b*M <= a*Z accepts; violation iff a*Z < b*M
+                viol = viol + (A * Z < B * M)
+    accept[j] = (viol == 0)
+    payload[j] = accept[j].if_else(o_actual, 0)     # fixed mask 0 on reject
+
+# ---- updated beliefs: filter on accept; on reject the VALUE is unchanged
+# (if_else = self*(a-b)+b is a secret mult; share identity/freshness NOT
+# established -- see NOTES.md) ----
+upd = [[None] * S for _ in range(N)]
+for j in range(N):
+    for idx in range(S):
+        filtered = delta[j][idx] * keep[idx]
+        upd[j][idx] = accept[j].if_else(filtered, delta[j][idx])
+
+# ---- TEST-ONLY reveals for conformance reconstruction ----
+for j in range(N):
+    print_ln('ACCEPT %s %s', j, accept[j].reveal())
+    print_ln('PAYLOAD %s %s', j, payload[j].reveal())
+for j in range(N):
+    for idx in range(S):
+        print_ln('W %s %s %s', j, idx, upd[j][idx].reveal())

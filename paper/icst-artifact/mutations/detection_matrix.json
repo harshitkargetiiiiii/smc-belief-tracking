@@ -1,0 +1,125 @@
+{
+  "meta": {
+    "purpose": "Machine-readable detection matrix for the adversarial mutation study (paper).",
+    "checker": "conformance/delivery_inspect.py @ repo 305a3a8 (final opcode-identity/channel-blocklist linter, rules a-h)",
+    "mpspdz_pin": "9d809599ea6ce627216a389ca7d984fbb75d0cb9",
+    "query_compiled": "p1_is_max",
+    "assembly_hash_definition": "manifest_signature() = sha256 over the full normalized per-tape assembly",
+    "accounting": "B0 = 1 motivating stdout failure; B1-B6 = 6 compiled-delivery mutation cases; S1 = 1 semantic mutation. NOT homogeneous: B1,B2,B3,B5 = committed source controls; B4 = SYNTHETIC manifest counterexample (not a source .mpc); B6 = reconstructed source mutation (naive caught); S1 = reconstructed source mutation (executed).",
+    "committed_controls_note": "5 committed .mpc controls map to B0,B1,B2,B3,B5 (leaky,subleak,namespoof,openfalse,openfalse_vec). NOT committed: B4 (synthetic), B6, S1 (reconstructed). B4 is NOT B3's control: openfalse.mpc is the rr-4 DUPLICATE-tape build (B3); B4 is the rr-5 existing-body SYNTHETIC manifest, caught by the memory rule with the multiset intact.",
+    "runtime_note": "The negative controls (B0-B5/B3/B5) are compiled and LINTED, never executed; CI runs only the clean private build at runtime. S1 was EXECUTED end-to-end (see s1_runtime_evidence.json). B6's naive realization is caught at lint, so not executed. B4 is a synthetic manifest, never compiled/executed.",
+    "scope_statement": "The studied opcode-identity/channel-blocklist linter cannot be promoted to a general non-leakage checker; call_tape/call_arg cannot be blocklisted because the honest build uses that channel. Distinguishing legitimate from leaking flows requires analysis stronger than opcode/channel identity (operand/provenance-sensitive dataflow, typing, verified IR, or other semantic machinery); we did NOT evaluate such a checker.",
+    "honest_build_uses_call_arg": {
+      "claim": "the honest private build passes SECRET comparison operands across tapes via call_tape(main)/call_arg(subtapes), no memory",
+      "reproduce": "./compile.py -R 64 -a asm_honest threshold_smc_private p1_is_max ; grep call_tape/call_arg",
+      "main_call_tape_lines": 3,
+      "example": "call_tape 12, 1, ci0, 1, 4, 81, s202(81), s0(81), 0, 4, 81, s1296(81), s283(81) # 85"
+    }
+  },
+  "mutations": [
+    {
+      "id": "B0",
+      "status": "committed source control",
+      "channel": "public reveal() in MAIN tape",
+      "checker_version_defeated": "stdout-transcript-only checker (R-41)",
+      "source": "conformance/mpc/threshold_smc_leaky.mpc (frozen @305a3a8)",
+      "compile": "./compile.py -R 64 -a asm_leaky threshold_smc_leaky p1_is_max",
+      "assembly_sha256_manifest": "46635d1b4048951c899080fbbc7c0d471fd65140ddb0bbd3f7e88dfe565eb2a9",
+      "linter_outcome": "REJECTED: main privateoutput players [] != [0,0,1,1,2,2]",
+      "runtime_outcome": "not executed -- caught at lint time; the negative controls are compiled and linted, NOT run (CI executes only the clean private build)",
+      "oracle_outcome": "n/a (leak control; caught at lint)",
+      "evidence": "CI ci-private *_rejected=True; review-log"
+    },
+    {
+      "id": "B1",
+      "status": "committed source control",
+      "channel": "separate @function_tape public reveal()+print_ln",
+      "checker_version_defeated": "MAIN-tape-only inspection (rr-2/R-42)",
+      "source": "conformance/mpc/threshold_smc_subleak.mpc (frozen @305a3a8)",
+      "compile": "./compile.py -R 64 -a asm_sub threshold_smc_subleak p1_is_max",
+      "assembly_sha256_manifest": "666bdd175690e78a655d3e193f56b08becd36592b2e33ab402f015f7296a386b",
+      "linter_outcome": "REJECTED: non-main tape multiset ['EQZ(3)_63', 'EQZ(81)_63', 'LTZ(36)_64', 'leak_final', 'leak_final', 'leak_final', 'leak_final', 'leak_final', 'leak_final'] != pinned ['EQZ(3)_63', 'EQZ(81)_63', 'LTZ(36)_64']",
+      "runtime_outcome": "not executed -- caught at lint time; the negative controls are compiled and linted, NOT run (CI executes only the clean private build)",
+      "oracle_outcome": "n/a (leak control; caught at lint)",
+      "evidence": "CI ci-private *_rejected=True; review-log"
+    },
+    {
+      "id": "B2",
+      "status": "committed source control",
+      "channel": "name-spoofed subtape: wrong-player privateoutput + file sink",
+      "checker_version_defeated": "name-based masked-subtape allowlist (rr-3/R-43)",
+      "source": "conformance/mpc/threshold_smc_namespoof.mpc (frozen @305a3a8)",
+      "compile": "./compile.py -R 64 -a asm_ns threshold_smc_namespoof p1_is_max",
+      "assembly_sha256_manifest": "455c7bda9f915eae0d58b5a5c4a607a0fe2afb8559f28ad5edba45cf01394b3c",
+      "linter_outcome": "REJECTED: non-main tape multiset ['EQZ(3)_63', 'EQZ(81)_63', 'EQZ(spoof)', 'LTZ(36)_64'] != pinned ['EQZ(3)_63', 'EQZ(81)_63', 'LTZ(36)_64']",
+      "runtime_outcome": "not executed -- caught at lint time; the negative controls are compiled and linted, NOT run (CI executes only the clean private build)",
+      "oracle_outcome": "n/a (leak control; caught at lint)",
+      "evidence": "CI ci-private *_rejected=True; review-log"
+    },
+    {
+      "id": "B3",
+      "status": "committed source control",
+      "channel": "reveal(False) in a SPOOFED (duplicate) EQZ(3)_63 via scalar stms/ldms",
+      "checker_version_defeated": "open-flag-based safety, True-only (rr-4/R-44)",
+      "source": "conformance/mpc/threshold_smc_openfalse.mpc (frozen @305a3a8)",
+      "compile": "./compile.py -R 64 -a asm_of threshold_smc_openfalse p1_is_max",
+      "assembly_sha256_manifest": "ac981bd7522c474ffded3cfb40c1ae2715e989bbf5621654692fc25feefb5add",
+      "linter_outcome": "REJECTED: non-main tape multiset ['EQZ(3)_63', 'EQZ(3)_63', 'EQZ(81)_63', 'LTZ(36)_64'] != pinned ['EQZ(3)_63', 'EQZ(81)_63', 'LTZ(36)_64']",
+      "runtime_outcome": "not executed -- caught at lint time; the negative controls are compiled and linted, NOT run (CI executes only the clean private build)",
+      "oracle_outcome": "n/a (leak control; caught at lint)",
+      "evidence": "CI ci-private *_rejected=True; review-log"
+    },
+    {
+      "id": "B4",
+      "status": "SYNTHETIC compiled-manifest counterexample (NOT a source .mpc, NOT committed)",
+      "channel": "reveal(False) of the verdict injected into an EXISTING EQZ(3)_63 body via ldms; three pinned tape names intact",
+      "checker_version_defeated": "rr-4 multiset pin (names/counts only; blind to tape bodies) (R-45)",
+      "source": "synthetic manifest: real private manifest + ldms/asm_open(False) appended to the EQZ(3)_63 body (reproduce: paper/mutations/README.md)",
+      "compile": "n/a (hand-authored manifest, not compiled from a .mpc)",
+      "assembly_sha256_manifest": "n/a (synthetic manifest)",
+      "linter_outcome": "REJECTED: non-main tape EQZ(3)_63 accesses memory (verdict exfil path): ['ldms s777, 4000'] | multiset NOT perturbed (rejected by memory rule h, not multiset)",
+      "runtime_outcome": "n/a (synthetic manifest; never compiled or executed)",
+      "oracle_outcome": "n/a",
+      "evidence": "review-log R-45; reproducible via delivery_inspect on the synthetic manifest"
+    },
+    {
+      "id": "B5",
+      "status": "committed source control",
+      "channel": "reveal(False) crossing the boundary via vectorized vstms/vldms",
+      "checker_version_defeated": "scalar-only memory regex (rr-6/R-46)",
+      "source": "conformance/mpc/threshold_smc_openfalse_vec.mpc (frozen @305a3a8)",
+      "compile": "./compile.py -R 64 -a asm_ofv threshold_smc_openfalse_vec p1_is_max",
+      "assembly_sha256_manifest": "4a7de1a4213ff146b774d0959ebe06bcfbc8cbcd08b4801d504faba0b04f17ec",
+      "linter_outcome": "REJECTED: non-main tape multiset ['EQZ(3)_63', 'EQZ(3)_63', 'EQZ(81)_63', 'LTZ(36)_64'] != pinned ['EQZ(3)_63', 'EQZ(81)_63', 'LTZ(36)_64']",
+      "runtime_outcome": "not executed -- caught at lint time; the negative controls are compiled and linted, NOT run (CI executes only the clean private build)",
+      "oracle_outcome": "n/a (leak control; caught at lint)",
+      "evidence": "CI ci-private *_rejected=True; review-log"
+    },
+    {
+      "id": "B6",
+      "status": "reconstructed source mutation (paper/mutations/, NOT committed)",
+      "channel": "call_tape/call_arg register-argument transfer (the channel the honest comparison subtapes use)",
+      "checker_version_defeated": "NONE of the final linter. Precise strength (R-47): the studied opcode-identity/channel-blocklist linter cannot be promoted to a general non-leakage checker; call_tape/call_arg cannot be blocklisted because the honest build uses it. NOT a bypass of the final linter; NOT a claim that stronger (dataflow/typing/verified-IR) analysis is impossible -- we did not evaluate one.",
+      "source": "paper/mutations/threshold_smc_callarg.mpc",
+      "compile": "./compile.py -R 64 -a asm_b6 threshold_smc_callarg p1_is_max",
+      "assembly_sha256_manifest": "506710b60ab7a9d91a688255ecfb5ce275f844155f309c4d185903f9594ade48",
+      "linter_outcome": "REJECTED: non-main tape multiset ['EQZ(3)_63', 'EQZ(81)_63', 'LTZ(36)_64', '_leak'] != pinned ['EQZ(3)_63', 'EQZ(81)_63', 'LTZ(36)_64']; main tape stores to memory (verdict exfil channel): ['stms s3, 8192 # 802']",
+      "runtime_outcome": "not executed (naive realization caught at lint)",
+      "oracle_outcome": "n/a",
+      "evidence": "this matrix; honest-build call_tape/call_arg evidence in meta; review-log R-47"
+    },
+    {
+      "id": "S1",
+      "status": "reconstructed source mutation (paper/mutations/, NOT committed)",
+      "channel": "none (correct private delivery structure); SEMANTIC error -- reject-mask dropped (payload=o_actual always)",
+      "checker_version_defeated": "the delivery linter is semantics-blind: it checks HOW values are delivered, not WHICH",
+      "source": "paper/mutations/threshold_smc_wrongsem.mpc",
+      "compile": "./compile.py -R 64 threshold_smc_wrongsem p1_is_max",
+      "assembly_sha256_manifest": "18b24ff7e008ac2c4daf16a80994e7061d82b707046586575a854318afe74a0f",
+      "linter_outcome": "PASS(private)",
+      "runtime_outcome": "EXECUTED end-to-end at the pin (all 3 parties rc=0): delivered ACCEPT 0 / PAYLOAD 1 to every party; oracle masks payload to 0 on reject -> mismatch at parties [0,1,2]. Raw: paper/mutations/s1_runtime_evidence.json",
+      "oracle_outcome": "FAIL (executed): secrets=(0,0,0) p1_is_max; oracle accept=[0, 0, 0] payload=[0, 0, 0]; delivered payload=1 to all three",
+      "evidence": "paper/mutations/s1_runtime_evidence.json (raw per-party stdout, oracle vs delivered, source sha256, compile command)"
+    }
+  ]
+}
